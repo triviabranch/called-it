@@ -6,7 +6,7 @@ function json(data, status = 200) {
 }
 function leaguePath(league) { return encodeURIComponent((league || "eng.1").trim().toLowerCase()); }
 async function readJson(url) {
-  const response = await fetch(url, { headers: { accept: "application/json", "user-agent": "Called-It-Test-Harness/1.0" } });
+  const response = await fetch(url, { headers: { accept: "application/json, text/plain, */*", "accept-language": "en-GB,en;q=0.9", "origin": "https://www.espn.com", "referer": "https://www.espn.com/", "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36", "x-requested-with": "XMLHttpRequest" } });
   if (!response.ok) throw new Error(`ESPN returned ${response.status}`);
   return response.json();
 }
