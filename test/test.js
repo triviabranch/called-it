@@ -49,7 +49,7 @@ function renderMatch() {
   resetReplay();
 }
 function resetReplay() { state.started=false; state.paused=false; state.released=new Set(); state.elapsedBeforePause=0; if(state.timer) cancelAnimationFrame(state.timer); $("#matchClock").textContent="00:00"; $("#cueStatus").textContent="Ready for kick-off cue"; $("#pause").disabled=true; $("#pause").textContent="Pause"; $("#printerCount").textContent="0 RELEASED"; $("#printer").innerHTML='<div class="empty">Form the kick-off cue to begin the replay.</div>'; }
-function cleanSummary(event) { return String(event.text || "Match update").replace(/\\s+/g, " ").trim(); }
+function cleanSummary(event) { return String(event.text || "Match update").replace(/\s+/g, " ").trim(); }
 function renderPrinter() {
   const events = (state.match?.events || []).filter(e => state.filter === "all" || e.type === state.filter);
   const visible = events.filter(e => state.released.has(e.id));
