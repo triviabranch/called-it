@@ -57,13 +57,31 @@ function renderPrinter() {
   $("#printer").innerHTML = visible.length ? visible.map(e => `<div class="print-line"><span class="time">${formatOffset(e.offset)}</span><span class="tag">${escapeHtml(e.type)}</span><span class="detail">${escapeHtml(cleanSummary(e))}${e.team ? ` <strong>· ${escapeHtml(e.team)}</strong>` : ""}</span></div>`).join("") : '<div class="empty">No updates match this filter yet.</div>';
   $("#printer").scrollTop = $("#printer").scrollHeight;
 }
+function appendPrinterEvent(event) {
+  const empty = $("#printer .empty");
+  if (empty) empty.remove();
+  const row = document.createElement("div"); row.className = "print-line";
+  const time = document.createElement("span"); time.className = "time"; time.textContent = formatOffset(event.offset);
+  const tag = document.createElement("span"); tag.className = "tag"; tag.textContent = event.type;
+  const detail = document.createElement("span"); detail.className = "detail"; detail.textContent = cleanSummary(event) + (event.team ? " · " + event.team : "");
+  row.append(time, tag, detail); $("#printer").appendChild(row);
+}
+function releaseEvents(elapsed) {
+  const events = state.match?.events || [];
+  const newlyReleased = events.filter(e => e.offset != null && e.offset <= elapsed && !state.released.has(e.id));
+  newlyReleased.forEach(e => state.released.add(e.id));
+  if (!newlyReleased.length) return;
+  if (state.filter === "all") newlyReleased.forEach(appendPrinterEvent); else renderPrinter();
+  const visibleCount = events.filter(e => state.released.has(e.id) && (state.filter === "all" || e.type === state.filter)).length;
+  $("#printerCount").textContent = visibleCount + " RELEASED";
+  $("#printer").scrollTop = $("#printer").scrollHeight;
+}
 function tick(now) {
   if (!state.started || state.paused) return;
   const elapsed = (now - state.startedAt) / 1000 * state.speed + state.elapsedBeforePause;
   $("#matchClock").textContent = formatClock(elapsed);
   const events = state.match.events || [];
-  events.filter(e => e.offset != null && e.offset <= elapsed).forEach(e => state.released.add(e.id));
-  renderPrinter();
+  releaseEvents(elapsed);
   if (events.some(e => e.offset != null && !state.released.has(e.id))) state.timer = requestAnimationFrame(tick);
   else { state.paused=true; $("#pause").disabled=true; $("#cueStatus").textContent="Replay complete"; }
 }
