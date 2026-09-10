@@ -184,7 +184,7 @@ export class MatchRoom {
     s.clock = Math.max(0, elapsed);
     if (r.status === "warmup" && now >= r.warmupEndsAt) { r.status = "voting"; r.voteEndsAt = now + 10000; this.room.events.unshift({ label: "Vote now", detail: r.question }); await this.save(); this.broadcast(); this.schedule(10000); return; }
     if (r.status === "voting" && now >= r.voteEndsAt) { r.status = "locked"; await this.settleRound(r); return; }
-    if (r.status === "locked") { const next = this.nextTarget(s.clock); if (next) await this.openRound(next, (s.nextRoundIndex || 0) + 1); else { s.status = "complete"; await this.save(); this.broadcast(); } return; }
+    if (r.status === "locked" || r.status === "settled") { const next = this.nextTarget(s.clock); if (next) { s.nextRoundIndex = (s.nextRoundIndex || 0) + 1; await this.openRound(next, s.nextRoundIndex); } else { s.status = "complete"; await this.save(); this.broadcast(); } return; }
     this.schedule(r.status === "warmup" ? r.warmupEndsAt - now : r.voteEndsAt - now);
   }
   async settleRound(round) {
