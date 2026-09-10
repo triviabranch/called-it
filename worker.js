@@ -201,7 +201,7 @@ export class MatchRoom {
   }
   async webSocketMessage(ws, raw) {
     let m; try { m = JSON.parse(raw); } catch { return; } if (!this.room) await this.load(); this.room.lastActivity = Date.now();
-    if (m.type === "join") { const p = { id: crypto.randomUUID(), name: String(m.name || "Supporter").slice(0,20), points: 0, rounds: 0 }; this.room.players.push(p); ws.send(JSON.stringify({ type:"identity", playerId:p.id })); }
+    if (m.type === "join") { let p = this.room.players.find(x => x.id === m.playerId); if (!p) { p = { id: crypto.randomUUID(), name: String(m.name || "Supporter").slice(0,20), points: 0, rounds: 0 }; this.room.players.push(p); } else if (m.name) p.name = String(m.name).slice(0,20); ws.send(JSON.stringify({ type:"identity", playerId:p.id })); }
     if (m.type === "start") await this.startSession();
     if (m.type === "predict") { const p = this.room.players.find(x => x.id === m.playerId), r = this.room.session.round; if (p && r?.status === "voting" && Date.now() < r.voteEndsAt && r.id === m.roundId) { this.room.predictions[p.id] ||= {}; this.room.predictions[p.id][r.id] = m.answer; } }
     await this.save(); this.broadcast();
