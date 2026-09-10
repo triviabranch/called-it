@@ -1,0 +1,15 @@
+name = "called-it"
+main = "worker.js"
+compatibility_date = "2026-09-10"
+
+[assets]
+directory = "."
+binding = "ASSETS"
+
+[[durable_objects.bindings]]
+name = "MATCH_ROOM"
+class_name = "MatchRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["MatchRoom"]
