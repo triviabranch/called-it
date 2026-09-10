@@ -7,7 +7,10 @@ function clock(s){s=Math.max(0,Math.floor(s||0));return String(Math.floor(s/60))
 function preMatchCard(me){
  const questions=state.preMatch||[], answered=state.playerStatus?.[playerId]||[], current=questions.find(x=>!answered.includes(x.id)&&!x.settled);
  if(!current)return '<div class="pre-complete">Pre-match calls complete. Watch the match for the first live opportunity.</div>';
- return '<div class="pre-modal-backdrop"><div class="pre-modal"><div class="phase">Pre-match call '+(answered.length+1)+' of '+questions.length+'</div><h2>'+esc(current.question)+'</h2><p class="muted">Make your call before kick-off.</p><div class="answers">'+current.choices.map(a=>'<button class="answer" data-pre="'+esc(a.key)+'">'+esc(a.label)+'</button>').join("")+'</div></div></div>';
+ const answerUi=current.input
+  ? '<label class="number-call">'+esc(current.input.suffix||"Minutes")+'<input id="preNumber" type="number" min="'+current.input.min+'" max="'+current.input.max+'" step="'+current.input.step+'" value="'+current.input.min+'"></label><button class="answer" data-pre-submit="'+esc(current.id)+'">Submit call</button>'
+  : '<div class="answers">'+current.choices.map(a=>'<button class="answer" data-pre="'+esc(a.key)+'">'+esc(a.label)+'</button>').join("")+'</div>';
+ return '<div class="pre-modal-backdrop"><div class="pre-modal"><div class="phase">Pre-match call '+(answered.length+1)+' of '+questions.length+'</div><h2>'+esc(current.question)+'</h2><p class="muted">Make your call before kick-off.</p>'+answerUi+'</div></div>';
 }
 function render(){
  if(!state)return;
@@ -22,7 +25,7 @@ function render(){
  '<section class="card"><h2>Room activity</h2>'+(state.events||[]).slice(0,5).map(e=>'<div class="event"><b>'+esc(e.label)+'</b><br><span class="muted">'+esc(e.detail)+'</span></div>').join("")+'</section>';
  const join=document.querySelector("#join");if(join)join.onclick=()=>{const name=document.querySelector("#name").value||"Supporter";send({type:"join",name,playerId});join.disabled=true};
  const start=document.querySelector("#start");if(start)start.onclick=()=>send({type:"start"});
- document.querySelectorAll("[data-pre]").forEach(b=>b.onclick=()=>send({type:"prematch",playerId,questionId:(state.preMatch||[]).find(x=>x.choices.some(a=>a.key===b.dataset.pre)&&!(state.playerStatus?.[playerId]||[]).includes(x.id))?.id,answer:b.dataset.pre}));
+ document.querySelectorAll("[data-pre]").forEach(b=>b.onclick=()=>{const question=(state.preMatch||[]).find(x=>x.choices.some(a=>a.key===b.dataset.pre)&&!(state.playerStatus?.[playerId]||[]).includes(x.id));send({type:"prematch",playerId,questionId:question?.id,answer:b.dataset.pre})}); document.querySelectorAll("[data-pre-submit]").forEach(b=>b.onclick=()=>{const input=document.querySelector("#preNumber");send({type:"prematch",playerId,questionId:b.dataset.preSubmit,answer:input?.value})});
  document.querySelectorAll("[data-answer]").forEach(b=>b.onclick=()=>send({type:"predict",playerId,roundId:r?.id,answer:b.dataset.answer}));
  if(r?.status==="warmup"||r?.status==="voting")setTimeout(render,1000);
 }
