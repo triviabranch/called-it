@@ -47,6 +47,15 @@ function renderMatch() {
   $("#matchTitle").textContent = `${f.home.name} v ${f.away.name}`; $("#matchMeta").textContent = `${formatDate(f.date || state.date)} · ${state.league} · ${events.length} timestamped updates`;
   $("#homeName").textContent = f.home.name; $("#awayName").textContent = f.away.name; $("#homeScore").textContent = f.home.score ?? "–"; $("#awayScore").textContent = f.away.score ?? "–";
   resetReplay();
+  const createRoom = $("#createRoom");
+  if (createRoom) createRoom.onclick = async () => {
+    createRoom.disabled = true; createRoom.textContent = "Creating room…";
+    try {
+      const r = await fetch("/api/room", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ fixture: f, league: state.league, events }) });
+      const d = await r.json(); if (!r.ok) throw Error(d.error || "Could not create room");
+      location.href = `/play?room=${encodeURIComponent(d.roomId)}&role=host`;
+    } catch (err) { createRoom.disabled = false; createRoom.textContent = "Create prediction room ↗"; alert(err.message); }
+  };
 }
 function resetReplay() { state.started=false; state.paused=false; state.released=new Set(); state.elapsedBeforePause=0; if(state.timer) cancelAnimationFrame(state.timer); $("#matchClock").textContent="00:00"; $("#cueStatus").textContent="Ready for kick-off cue"; $("#pause").disabled=true; $("#pause").textContent="Pause"; $("#printerCount").textContent="0 RELEASED"; $("#printer").innerHTML='<div class="empty">Form the kick-off cue to begin the replay.</div>'; }
 function cleanSummary(event) { return String(event.text || "Match update").replace(/\s+/g, " ").trim(); }
