@@ -7,7 +7,7 @@ function clock(s){s=Math.max(0,Math.floor(s||0));return String(Math.floor(s/60))
 function preMatchCard(me){
  const questions=state.preMatch||[], answered=state.playerStatus?.[playerId]||[], current=questions.find(x=>!answered.includes(x.id)&&!x.settled);
  if(!current)return '<div class="pre-complete">Pre-match calls complete. Watch the match for the first live opportunity.</div>';
- return '<div class="pre-modal"><div class="phase">Pre-match call '+(answered.length+1)+' of '+questions.length+'</div><h2>'+esc(current.question)+'</h2><p class="muted">Make your call before kick-off.</p><div class="answers">'+current.choices.map(a=>'<button class="answer" data-pre="'+esc(a.key)+'">'+esc(a.label)+'</button>').join("")+'</div></div>';
+ return '<div class="pre-modal-backdrop"><div class="pre-modal"><div class="phase">Pre-match call '+(answered.length+1)+' of '+questions.length+'</div><h2>'+esc(current.question)+'</h2><p class="muted">Make your call before kick-off.</p><div class="answers">'+current.choices.map(a=>'<button class="answer" data-pre="'+esc(a.key)+'">'+esc(a.label)+'</button>').join("")+'</div></div></div>';
 }
 function render(){
  if(!state)return;
