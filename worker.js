@@ -66,6 +66,7 @@ function normaliseEvent(item, index, source) {
   return { id: String(item?.id || `${source}-${index}`), source, type: eventType(item), offset, minute: offset == null ? null : Math.floor(offset / 60), period: item?.period?.number || item?.period?.displayValue || null, text: item?.text || item?.shortText || item?.description || item?.detail || item?.type?.text || "Match update", athletes: (item?.participants || item?.athletes || []).map(p => p?.athlete?.displayName || p?.displayName).filter(Boolean), team: item?.team?.displayName || item?.team?.shortDisplayName || null, raw: item };
 }
 function normaliseCorePlay(item, index) { return normaliseEvent({ ...item, text: item.text || item.shortText || item.alternativeText || item.type?.text }, index, "core-play"); }
+function normaliseCommentary(item, index) { const play = item?.play || item; return normaliseEvent({ ...play, clock: play.clock || item.time, text: item.text || play.text || play.shortText }, index, "commentary"); }
 function meaningful(item) { return eventType(item) !== "other"; }
 
 async function espnApi(url) {
@@ -95,7 +96,7 @@ async function espnApi(url) {
       const f = fixture({ id, name: competition.shortName || competition.name, date: competition.date, competitions: [{ ...competition, competitors: competition.competitors || [] }], status: competition.status });
       const coreItems = plays.status === "fulfilled" ? (plays.value.items || plays.value.plays || []) : [];
       const summaryPlays = (data.plays || []).map((p, i) => normaliseEvent(p, i, "summary-play"));
-      const commentary = (data.commentary || []).map((p, i) => normaliseEvent(p, i, "commentary"));
+      const commentary = (data.commentary || []).map(normaliseCommentary);
       const primary = coreItems.length ? coreItems.filter(meaningful).map(normaliseCorePlay) : summaryPlays.filter(e => e.type !== "other");
       const seen = new Set();
       const events = [...primary, ...commentary].filter(e => {
