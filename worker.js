@@ -169,8 +169,8 @@ export class MatchRoom {
     return { id: "round-" + index, targetEventId: target.id, targetType: target.type, question: "Who gets the next " + target.type.replace("-", " ") + "?", choices: [{ key: "home", label: home }, { key: "away", label: away }], status: "warmup", warmupEndsAt: null, voteEndsAt: null, result: null };
   }
   nextTarget(clock) {
-    const types = ["corner", "goal", "card"];
-    return this.room.timeline.find(e => e.offset > clock && types.includes(e.type));
+    const types = ["corner", "goal", "card"], minimumGap = clock > 0 ? 600 : 0;
+    return this.room.timeline.find(e => e.offset >= clock + minimumGap && types.includes(e.type));
   }
   targetForQuestion(q) { return this.room.timeline.find(e => (q.type === "first-goal-team" && e.type === "goal") || (q.type === "first-goal-kick-time" && e.type === "goal-kick") || (q.type === "first-foul-team" && e.type === "foul")); }
   keyForQuestion(q, target) {
