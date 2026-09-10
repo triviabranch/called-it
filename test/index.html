@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#e8dfcc"><title>Called It — ESPN Test Harness</title>
+<link rel="stylesheet" href="/test/test.css">
+</head>
+<body>
+<div class="grain"></div>
+<header class="test-head"><a href="/" class="wordmark">CALLED <i>IT</i></a><span>ESPN / TEST HARNESS</span><a href="/" class="back">Exit test ↗</a></header>
+<main>
+<section class="intro" id="intro">
+<p class="eyebrow"><b></b> Internal playground · ESPN feed</p>
+<h1>Replay<br><i>the match.</i></h1>
+<p class="lede">Pull a programme from ESPN, choose a fixture, then watch every update arrive against a simulated kick-off.</p>
+<button class="primary" id="openSetup">Configure a replay <span>↗</span></button>
+</section>
+<section class="playback hidden" id="playback">
+<div class="play-top"><div><p class="eyebrow"><b></b> Live replay · ESPN</p><h2 id="matchTitle">Match</h2><p class="muted" id="matchMeta">Loading match data…</p></div><button class="ghost" id="changeMatch">Change match</button></div>
+<div class="scoreline"><span id="homeName">HOME</span><strong><i id="homeScore">–</i><em>—</em><i id="awayScore">–</i></strong><span id="awayName">AWAY</span></div>
+<div class="clock-row"><div><span>SIMULATED MATCH CLOCK</span><strong id="matchClock">00:00</strong></div><div class="cue-status" id="cueStatus">Ready for kick-off cue</div></div>
+<div class="controls"><button class="primary" id="kickoff">Form kick-off cue <span>▶</span></button><button class="secondary" id="pause" disabled>Pause</button><button class="secondary" id="reset">Reset</button></div>
+<div class="speed-row"><span>Playback speed</span><div id="speeds"><button class="selected" data-speed="1">1×</button><button class="" data-speed="2">2×</button><button class="" data-speed="5">5×</button><button class="" data-speed="10">10×</button><button class="" data-speed="20">20×</button><button class="" data-speed="50">50×</button></div></div>
+<div class="filter-row"><span>Show updates</span><div id="filters"><button class="selected" data-filter="all">all</button><button class="" data-filter="goal">goal</button><button class="" data-filter="corner">corner</button><button class="" data-filter="foul">foul</button><button class="" data-filter="card">card</button><button class="" data-filter="substitution">substitution</button><button class="" data-filter="offside">offside</button><button class="" data-filter="shot">shot</button><button class="" data-filter="var">var</button><button class="" data-filter="other">other</button></div></div>
+<div class="printer-head"><span>LIVE UPDATE PRINTER</span><span id="printerCount">0 RELEASED</span></div>
+<div class="printer" id="printer"><div class="empty">Form the kick-off cue to begin the replay.</div></div>
+<details class="raw"><summary>Raw ESPN response</summary><pre id="rawData"></pre></details>
+</section>
+</main>
+<div class="modal-layer hidden" id="setupLayer">
+<div class="modal" id="setupModal">
+<div class="modal-top"><span>01 / SET UP REPLAY</span><button class="close" data-close>×</button></div>
+<h2>Choose a<br><i>programme.</i></h2>
+<p>Use an ESPN competition slug such as <b>eng.1</b> for the Premier League or <b>uefa.champions</b> for the Champions League.</p>
+<form id="setupForm"><label>Match date<input id="dateInput" type="date" required></label><label>Competition slug<input id="leagueInput" value="eng.1" required autocapitalize="none"></label><button class="primary" type="submit">Pull programme <span>↗</span></button></form>
+<div class="form-error" id="setupError"></div>
+</div>
+<div class="modal hidden" id="fixturesModal">
+<div class="modal-top"><span>02 / SELECT FIXTURE</span><button class="close" data-close>×</button></div>
+<div class="fixture-title"><h2 id="fixtureHeading">Programme</h2><button class="text-button" id="backSetup">← Change search</button></div>
+<div id="fixtures" class="fixtures"></div>
+<div class="form-error" id="fixtureError"></div>
+</div>
+</div>
+<script src="/test/test.js"></script>
+</body>
+</html>
