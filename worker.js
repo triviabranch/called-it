@@ -116,7 +116,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname.startsWith("/api/espn/")) { const response = await espnApi(url); if (response) return response; }
-    if (url.pathname === "/api/room" && request.method === "POST") { const id = env.MATCH_ROOM.newUniqueId(); return env.MATCH_ROOM.get(id).fetch(new Request("https://room/create", { method: "POST" })); }
+    if (url.pathname === "/api/room" && request.method === "POST") { const id = env.MATCH_ROOM.newUniqueId(); return env.MATCH_ROOM.get(id).fetch(new Request("https://room/create", { method: "POST", body: await request.text(), headers: { "content-type": "application/json" } })); }
     if (url.pathname.startsWith("/api/room/")) { try { return env.MATCH_ROOM.get(env.MATCH_ROOM.idFromString(url.pathname.split("/").pop())).fetch(request); } catch { return new Response("Invalid room", { status: 400 }); } }
     if (url.pathname === "/play") return env.ASSETS.fetch(new Request(new URL("/game.html", request.url), request));
     if (url.pathname === "/test" || url.pathname === "/test/") return env.ASSETS.fetch(new Request(new URL("/test/index.html", request.url), request));
@@ -126,18 +126,89 @@ export default {
 export class MatchRoom {
   constructor(state, env) { this.state = state; this.env = env; this.sockets = new Set(); this.room = null; }
   async fetch(request) {
-    if (request.headers.get("Upgrade") === "websocket") { const pair = new WebSocketPair(); this.state.acceptWebSocket(pair[1]); this.sockets.add(pair[1]); if (!this.room) await this.load(); pair[1].send(JSON.stringify({ type: "state", state: this.public() })); return new Response(null, { status: 101, webSocket: pair[0] }); }
-    if (request.method === "POST" && !this.room) { await this.load(); await this.save(); return Response.json({ roomId: this.state.id.toString(), state: this.public() }); }
+    if (request.headers.get("Upgrade") === "websocket") {
+      const pair = new WebSocketPair(); this.state.acceptWebSocket(pair[1]); this.sockets.add(pair[1]);
+      if (!this.room) await this.load(); pair[1].send(JSON.stringify({ type: "state", state: this.public() }));
+      return new Response(null, { status: 101, webSocket: pair[0] });
+    }
+    if (request.method === "POST" && !this.room) {
+      await this.load();
+      try {
+        const input = await request.json();
+        if (input.fixture) {
+          this.room.fixture = input.fixture;
+          this.room.provider = { name: "ESPN", league: input.league || "eng.1", eventId: input.fixture.id, error: null };
+          this.room.timeline = (input.events || []).filter(e => e && e.offset != null).map(e => ({ id: String(e.id), type: e.type, offset: Number(e.offset), minute: e.minute, text: e.text, team: e.team || null }));
+        }
+      } catch {}
+      await this.save(); return Response.json({ roomId: this.state.id.toString(), state: this.public() });
+    }
     return new Response("Room unavailable", { status: 404 });
   }
-  async load() { this.room = await this.state.storage.get("room") || { createdAt: Date.now(), lastActivity: Date.now(), home: "Arsenal", away: "Chelsea", score: [0, 0], status: "PRE", players: [], predictions: {}, events: [{ label: "Room opened", detail: "Powered by ESPN" }], provider: { name: "ESPN", league: "eng.1", eventId: null, error: null } }; }
+  async load() {
+    this.room = await this.state.storage.get("room") || {
+      createdAt: Date.now(), lastActivity: Date.now(), fixture: null, provider: { name: "ESPN", league: "eng.1", eventId: null, error: null },
+      timeline: [], session: { status: "lobby", startedAt: null, round: null, clock: 0 }, players: [], predictions: {}, leaderboard: [],
+      events: [{ label: "Room opened", detail: "Powered by ESPN" }]
+    };
+  }
   async save() { this.room.lastActivity = Date.now(); await this.state.storage.put("room", this.room); await this.state.storage.setAlarm(Date.now() + 7200000); }
   public() { return { ...this.room, predictions: undefined }; }
   broadcast() { const m = JSON.stringify({ type: "state", state: this.public() }); for (const ws of this.sockets) { try { ws.send(m); } catch {} } }
-  async updateESPN() { try { const data = await readJson("eng.1/scoreboard"); const e = data.events?.find(x => x.status?.type?.state === "in") || data.events?.[0]; if (!e) throw Error("No current ESPN event"); const teams = e.competitions?.[0]?.competitors || [], h = teams.find(x => x.homeAway === "home"), a = teams.find(x => x.homeAway === "away"); this.room.home = h?.team?.displayName || this.room.home; this.room.away = a?.team?.displayName || this.room.away; this.room.score = [Number(h?.score || 0), Number(a?.score || 0)]; this.room.status = e.status?.type?.shortDetail || e.status?.type?.name || this.room.status; this.room.provider.eventId = e.id; this.room.provider.error = null; this.room.events.unshift({ label: "ESPN update", detail: this.room.status }); } catch (err) { this.room.provider.error = err.message; } }
-  async webSocketMessage(ws, raw) { let m; try { m = JSON.parse(raw); } catch { return; } if (!this.room) await this.load(); this.room.lastActivity = Date.now(); if (m.type === "join") { const p = { id: crypto.randomUUID(), name: (m.name || "Supporter").slice(0, 20), points: 0 }; this.room.players.push(p); this.room.events.unshift({ label: p.name + " joined", detail: "Ready to call it" }); } if (m.type === "refresh") await this.updateESPN(); await this.save(); this.broadcast(); }
+  schedule(ms) { this.state.storage.setAlarm(Date.now() + Math.max(250, Math.min(ms, 7200000))); }
+  roundFor(target, index) {
+    const f = this.room.fixture || {}; const home = f.home?.name || "Home", away = f.away?.name || "Away";
+    return { id: "round-" + index, targetEventId: target.id, targetType: target.type, question: "Who gets the next " + target.type.replace("-", " ") + "?", choices: [{ key: "home", label: home }, { key: "away", label: away }], status: "warmup", warmupEndsAt: null, voteEndsAt: null, result: null };
+  }
+  nextTarget(clock) {
+    const types = ["corner", "goal", "card"];
+    return this.room.timeline.find(e => e.offset > clock && types.includes(e.type));
+  }
+  async startSession() {
+    const first = this.nextTarget(0);
+    if (!first) { this.room.session.status = "complete"; return; }
+    this.room.session = { status: "running", startedAt: Date.now(), round: null, clock: 0, nextRoundIndex: 0 };
+    await this.openRound(first, 0);
+  }
+  async openRound(target, index) {
+    const round = this.roundFor(target, index); const now = Date.now();
+    const leadMs = Math.max(0, (target.offset - this.room.session.clock) * 1000);
+    round.warmupEndsAt = now + Math.max(0, leadMs - 40000); round.voteEndsAt = round.warmupEndsAt + 30000;
+    if (leadMs < 40000) round.warmupEndsAt = now;
+    this.room.session.round = round; this.room.session.status = "warmup"; this.room.events.unshift({ label: "Prediction warming up", detail: round.question });
+    await this.save(); this.broadcast(); this.schedule(Math.max(250, round.warmupEndsAt - now));
+  }
+  async advance() {
+    const s = this.room.session, r = s.round; if (!r) return;
+    const now = Date.now(), elapsed = (now - s.startedAt) / 1000;
+    s.clock = Math.max(0, elapsed);
+    if (r.status === "warmup" && now >= r.warmupEndsAt) { r.status = "voting"; r.voteEndsAt = now + 10000; this.room.events.unshift({ label: "Vote now", detail: r.question }); await this.save(); this.broadcast(); this.schedule(10000); return; }
+    if (r.status === "voting" && now >= r.voteEndsAt) { r.status = "locked"; await this.settleRound(r); return; }
+    if (r.status === "locked") { const next = this.nextTarget(s.clock); if (next) await this.openRound(next, (s.nextRoundIndex || 0) + 1); else { s.status = "complete"; await this.save(); this.broadcast(); } return; }
+    this.schedule(r.status === "warmup" ? r.warmupEndsAt - now : r.voteEndsAt - now);
+  }
+  async settleRound(round) {
+    const target = this.room.timeline.find(e => e.id === round.targetEventId); const correct = target?.team && this.room.fixture ? (target.team === this.room.fixture.home.name ? "home" : target.team === this.room.fixture.away.name ? "away" : null) : null;
+    round.result = { correct, event: target?.text || "Event occurred" }; round.status = "settled";
+    for (const p of this.room.players) {
+      const answer = this.room.predictions[p.id]?.[round.id]; const hit = correct && answer === correct;
+      if (hit) p.points = (p.points || 0) + 100;
+      if (!p.rounds) p.rounds = 0; if (answer) p.rounds++;
+    }
+    this.room.leaderboard = [...this.room.players].sort((a,b) => (b.points||0)-(a.points||0)).map((p,i) => ({ rank:i+1, name:p.name, points:p.points||0, rounds:p.rounds||0 }));
+    this.room.events.unshift({ label: correct ? "Prediction settled" : "Prediction settled", detail: round.result.event });
+    await this.save(); this.broadcast(); this.schedule(1500);
+  }
+  async webSocketMessage(ws, raw) {
+    let m; try { m = JSON.parse(raw); } catch { return; } if (!this.room) await this.load(); this.room.lastActivity = Date.now();
+    if (m.type === "join") { const p = { id: crypto.randomUUID(), name: String(m.name || "Supporter").slice(0,20), points: 0, rounds: 0 }; this.room.players.push(p); ws.send(JSON.stringify({ type:"identity", playerId:p.id })); }
+    if (m.type === "start") await this.startSession();
+    if (m.type === "predict") { const p = this.room.players.find(x => x.id === m.playerId), r = this.room.session.round; if (p && r?.status === "voting" && Date.now() < r.voteEndsAt && r.id === m.roundId) { this.room.predictions[p.id] ||= {}; this.room.predictions[p.id][r.id] = m.answer; } }
+    await this.save(); this.broadcast();
+    if (m.type === "start" || m.type === "predict") this.schedule(500);
+  }
   async closeRoom(ws) { this.sockets.delete(ws); if (this.sockets.size === 0) { if (this.room) { await this.state.storage.delete("room"); this.room = null; } await this.state.storage.deleteAlarm(); } }
   async webSocketClose(ws) { await this.closeRoom(ws); }
   async webSocketError(ws) { await this.closeRoom(ws); }
-  async alarm() { if (this.sockets.size === 0) { if (this.room) { await this.state.storage.delete("room"); this.room = null; } await this.state.storage.deleteAlarm(); } else await this.state.storage.setAlarm(Date.now() + 7200000); }
+  async alarm() { if (this.sockets.size === 0) { if (this.room) { await this.state.storage.delete("room"); this.room = null; } await this.state.storage.deleteAlarm(); } else { await this.load(); await this.advance(); } }
 }
