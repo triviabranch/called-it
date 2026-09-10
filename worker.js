@@ -1,4 +1,4 @@
-const ESPN_SITE = "https://site.api.espn.com/apis/site/v2/sports/soccer";
+const ESPN_SITE = "https://site.web.api.espn.com/apis/site/v2/sports/soccer";
 const ESPN_CORE = "https://sports.core.api.espn.com/v2/sports/soccer/leagues";
 
 function json(data, status = 200) {
