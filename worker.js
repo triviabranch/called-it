@@ -138,7 +138,7 @@ export class MatchRoom {
         if (input.fixture) {
           this.room.fixture = input.fixture;
           this.room.provider = { name: "ESPN", league: input.league || "eng.1", eventId: input.fixture.id, error: null };
-          this.room.timeline = (input.events || []).filter(e => e && e.offset != null).map(e => ({ id: String(e.id), type: e.type, offset: Number(e.offset), minute: e.minute, text: e.text, team: e.team || null }));
+          this.room.timeline = (input.events || []).filter(e => e && e.offset != null).map(e => ({ id: String(e.id), type: e.type, offset: Number(e.offset), minute: e.minute, text: e.text, team: e.team || null })); this.room.preMatch = this.buildPreMatch();
         }
       } catch {}
       await this.save(); return Response.json({ roomId: this.state.id.toString(), state: this.public() });
@@ -148,14 +148,22 @@ export class MatchRoom {
   async load() {
     this.room = await this.state.storage.get("room") || {
       createdAt: Date.now(), lastActivity: Date.now(), fixture: null, provider: { name: "ESPN", league: "eng.1", eventId: null, error: null },
-      timeline: [], session: { status: "lobby", startedAt: null, round: null, clock: 0 }, players: [], predictions: {}, leaderboard: [],
+      timeline: [], preMatch: [], session: { status: "lobby", startedAt: null, round: null, clock: 0 }, players: [], predictions: {}, leaderboard: [],
       events: [{ label: "Room opened", detail: "Powered by ESPN" }]
     };
   }
   async save() { this.room.lastActivity = Date.now(); await this.state.storage.put("room", this.room); await this.state.storage.setAlarm(Date.now() + 7200000); }
-  public() { return { ...this.room, predictions: undefined }; }
+  public() { return { ...this.room, predictions: undefined, playerStatus: Object.fromEntries(this.room.players.map(p => [p.id, Object.keys(this.room.predictions[p.id]?.pre || {})])) }; }
   broadcast() { const m = JSON.stringify({ type: "state", state: this.public() }); for (const ws of this.sockets) { try { ws.send(m); } catch {} } }
   schedule(ms) { this.state.storage.setAlarm(Date.now() + Math.max(250, Math.min(ms, 7200000))); }
+  buildPreMatch() {
+    const f = this.room.fixture || {}, home = f.home?.name || "Home", away = f.away?.name || "Away";
+    return [
+      { id: "first-goal-team", type: "first-goal-team", question: "Which team scores first?", choices: [{ key: "home", label: home }, { key: "away", label: away }], settled: false, result: null },
+      { id: "first-goal-kick-time", type: "first-goal-kick-time", question: "What’s the time of the first goal kick?", choices: ["0–15 minutes", "16–30 minutes", "31–45 minutes", "46–60 minutes", "61–75 minutes", "76–90 minutes"].map((label, i) => ({ key: String(i), label })), settled: false, result: null },
+      { id: "first-foul-team", type: "first-foul-team", question: "Which team commits the first foul?", choices: [{ key: "home", label: home }, { key: "away", label: away }], settled: false, result: null }
+    ];
+  }
   roundFor(target, index) {
     const f = this.room.fixture || {}; const home = f.home?.name || "Home", away = f.away?.name || "Away";
     return { id: "round-" + index, targetEventId: target.id, targetType: target.type, question: "Who gets the next " + target.type.replace("-", " ") + "?", choices: [{ key: "home", label: home }, { key: "away", label: away }], status: "warmup", warmupEndsAt: null, voteEndsAt: null, result: null };
@@ -164,6 +172,23 @@ export class MatchRoom {
     const types = ["corner", "goal", "card"];
     return this.room.timeline.find(e => e.offset > clock && types.includes(e.type));
   }
+  targetForQuestion(q) { return this.room.timeline.find(e => (q.type === "first-goal-team" && e.type === "goal") || (q.type === "first-goal-kick-time" && e.type === "goal-kick") || (q.type === "first-foul-team" && e.type === "foul")); }
+  keyForQuestion(q, target) {
+    if (!target) return null;
+    if (q.type === "first-goal-kick-time") return String(Math.min(5, Math.floor((target.offset || 0) / 900)));
+    const f = this.room.fixture || {}; return target.team === f.home?.name ? "home" : target.team === f.away?.name ? "away" : null;
+  }
+  settlePreMatch(clock) {
+    let changed = false;
+    for (const q of this.room.preMatch || []) {
+      if (q.settled) continue; const target = this.targetForQuestion(q);
+      if (!target || target.offset > clock) continue;
+      const correct = this.keyForQuestion(q, target); q.settled = true; q.result = { correct, event: target.text || "Event occurred" }; changed = true;
+      for (const p of this.room.players) { const answer = this.room.predictions[p.id]?.pre?.[q.id]; if (correct && answer === correct) p.points = (p.points || 0) + 100; }
+    }
+    if (changed) this.rebuildLeaderboard(); return changed;
+  }
+  rebuildLeaderboard() { this.rebuildLeaderboard(); }
   async startSession() {
     const first = this.nextTarget(0);
     if (!first) { this.room.session.status = "complete"; return; }
@@ -181,7 +206,7 @@ export class MatchRoom {
   async advance() {
     const s = this.room.session, r = s.round; if (!r) return;
     const now = Date.now(), elapsed = (now - s.startedAt) / 1000;
-    s.clock = Math.max(0, elapsed);
+    s.clock = Math.max(0, elapsed); this.settlePreMatch(s.clock);
     if (r.status === "warmup" && now >= r.warmupEndsAt) { r.status = "voting"; r.voteEndsAt = now + 10000; this.room.events.unshift({ label: "Vote now", detail: r.question }); await this.save(); this.broadcast(); this.schedule(10000); return; }
     if (r.status === "voting" && now >= r.voteEndsAt) { r.status = "locked"; await this.settleRound(r); return; }
     if (r.status === "locked" || r.status === "settled") { const next = this.nextTarget(s.clock); if (next) { s.nextRoundIndex = (s.nextRoundIndex || 0) + 1; await this.openRound(next, s.nextRoundIndex); } else { s.status = "complete"; await this.save(); this.broadcast(); } return; }
@@ -202,6 +227,7 @@ export class MatchRoom {
   async webSocketMessage(ws, raw) {
     let m; try { m = JSON.parse(raw); } catch { return; } if (!this.room) await this.load(); this.room.lastActivity = Date.now();
     if (m.type === "join") { let p = this.room.players.find(x => x.id === m.playerId); if (!p) { p = { id: crypto.randomUUID(), name: String(m.name || "Supporter").slice(0,20), points: 0, rounds: 0 }; this.room.players.push(p); } else if (m.name) p.name = String(m.name).slice(0,20); ws.send(JSON.stringify({ type:"identity", playerId:p.id })); }
+    if (m.type === "prematch") { const p = this.room.players.find(x => x.id === m.playerId), q = (this.room.preMatch || []).find(x => x.id === m.questionId); if (p && q && !q.settled && q.choices.some(c => c.key === m.answer)) { this.room.predictions[p.id] ||= {}; this.room.predictions[p.id].pre ||= {}; this.room.predictions[p.id].pre[q.id] = m.answer; } }
     if (m.type === "start") await this.startSession();
     if (m.type === "predict") { const p = this.room.players.find(x => x.id === m.playerId), r = this.room.session.round; if (p && r?.status === "voting" && Date.now() < r.voteEndsAt && r.id === m.roundId) { this.room.predictions[p.id] ||= {}; this.room.predictions[p.id][r.id] = m.answer; } }
     await this.save(); this.broadcast();
