@@ -46,14 +46,15 @@ function renderMatch() {
   const f = state.match.fixture || state.fixture; const events = state.match.events || [];
   $("#matchTitle").textContent = `${f.home.name} v ${f.away.name}`; $("#matchMeta").textContent = `${formatDate(f.date || state.date)} · ${state.league} · ${events.length} timestamped updates`;
   $("#homeName").textContent = f.home.name; $("#awayName").textContent = f.away.name; $("#homeScore").textContent = f.home.score ?? "–"; $("#awayScore").textContent = f.away.score ?? "–";
-  $("#rawData").textContent = JSON.stringify(state.match.raw, null, 2); resetReplay();
+  resetReplay();
 }
 function resetReplay() { state.started=false; state.paused=false; state.released=new Set(); state.elapsedBeforePause=0; if(state.timer) cancelAnimationFrame(state.timer); $("#matchClock").textContent="00:00"; $("#cueStatus").textContent="Ready for kick-off cue"; $("#pause").disabled=true; $("#pause").textContent="Pause"; $("#printerCount").textContent="0 RELEASED"; $("#printer").innerHTML='<div class="empty">Form the kick-off cue to begin the replay.</div>'; }
+function cleanSummary(event) { return String(event.text || "Match update").replace(/\\s+/g, " ").trim(); }
 function renderPrinter() {
   const events = (state.match?.events || []).filter(e => state.filter === "all" || e.type === state.filter);
   const visible = events.filter(e => state.released.has(e.id));
   $("#printerCount").textContent = `${visible.length} RELEASED`;
-  $("#printer").innerHTML = visible.length ? visible.map(e => `<div class="print-line"><span class="time">${formatOffset(e.offset)}</span><span class="tag">${escapeHtml(e.type)}</span><span class="detail">${escapeHtml(e.text)}${e.team ? ` <strong>· ${escapeHtml(e.team)}</strong>` : ""}</span></div>`).join("") : '<div class="empty">No updates match this filter yet.</div>';
+  $("#printer").innerHTML = visible.length ? visible.map(e => `<div class="print-line"><span class="time">${formatOffset(e.offset)}</span><span class="tag">${escapeHtml(e.type)}</span><span class="detail">${escapeHtml(cleanSummary(e))}${e.team ? ` <strong>· ${escapeHtml(e.team)}</strong>` : ""}</span></div>`).join("") : '<div class="empty">No updates match this filter yet.</div>';
   $("#printer").scrollTop = $("#printer").scrollHeight;
 }
 function tick(now) {
