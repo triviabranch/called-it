@@ -40,6 +40,7 @@ function eventClock(item) {
 }
 function eventType(item) {
   const kind = String(item?.type?.type || item?.type?.name || "").toLowerCase();
+  if (/goal.?kick/.test(kind)) return "goal-kick";
   if (item?.scoringPlay || /(^|[- ])(goal|score)(?![- ]?kick)/.test(kind)) return "goal";
   if (item?.redCard || /red.?card|sent.?off/.test(kind)) return "card";
   if (item?.yellowCard || /yellow.?card|caution|booking/.test(kind)) return "card";
@@ -51,6 +52,7 @@ function eventType(item) {
   if (/var|video/.test(kind)) return "var";
   if (/kickoff|kick.?off|halftime|half.?time|full.?time|match.?end/.test(kind)) return "phase";
   const text = [item?.type?.text, item?.type?.name, item?.text, item?.shortText, item?.description, item?.detail].filter(Boolean).join(" ").toLowerCase();
+  if (/goal kick/.test(text)) return "goal-kick";
   if (/(scores|scored|penalty kick goal|own goal|goal!)/.test(text) && !/goal kick/.test(text)) return "goal";
   if (/corner/.test(text)) return "corner";
   if (/foul|free kick/.test(text)) return "foul";
