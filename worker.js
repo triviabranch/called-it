@@ -10,6 +10,12 @@ async function readJson(url) {
   if (!response.ok) throw new Error(`ESPN returned ${response.status}`);
   return response.json();
 }
+async function readCorePlays(baseUrl) {
+  const first = await readJson(`${baseUrl}/plays?limit=300&page=1`);
+  const pageCount = Math.min(Number(first.pageCount || 1), 10);
+  const pages = await Promise.all(Array.from({ length: pageCount - 1 }, (_, i) => readJson(`${baseUrl}/plays?limit=300&page=${i + 2}`)));
+  return { ...first, items: [ ...(first.items || []), ...pages.flatMap(page => page.items || []) ] };
+}
 function fixture(item) {
   const competition = item?.competitions?.[0] || {};
   const teams = competition.competitors || [];
@@ -33,6 +39,17 @@ function eventClock(item) {
   return seconds != null && period > 1 && seconds < 2700 ? seconds + (period - 1) * 2700 : seconds;
 }
 function eventType(item) {
+  const kind = String(item?.type?.type || item?.type?.name || "").toLowerCase();
+  if (item?.scoringPlay || /goal|score/.test(kind)) return "goal";
+  if (item?.redCard || /red.?card|sent.?off/.test(kind)) return "card";
+  if (item?.yellowCard || /yellow.?card|caution|booking/.test(kind)) return "card";
+  if (item?.substitution || /substitut/.test(kind)) return "substitution";
+  if (/corner/.test(kind)) return "corner";
+  if (/foul|free.?kick/.test(kind)) return "foul";
+  if (/offside/.test(kind)) return "offside";
+  if (/shot|save|miss|block/.test(kind)) return "shot";
+  if (/var|video/.test(kind)) return "var";
+  if (/kickoff|kick.?off|halftime|half.?time|full.?time|match.?end/.test(kind)) return "phase";
   const text = [item?.type?.text, item?.type?.name, item?.text, item?.shortText, item?.description, item?.detail].filter(Boolean).join(" ").toLowerCase();
   if (/goal|scores|scored|penalty kick goal|own goal/.test(text)) return "goal";
   if (/corner/.test(text)) return "corner";
@@ -48,7 +65,8 @@ function normaliseEvent(item, index, source) {
   const offset = eventClock(item);
   return { id: String(item?.id || `${source}-${index}`), source, type: eventType(item), offset, minute: offset == null ? null : Math.floor(offset / 60), period: item?.period?.number || item?.period?.displayValue || null, text: item?.text || item?.shortText || item?.description || item?.detail || item?.type?.text || "Match update", athletes: (item?.participants || item?.athletes || []).map(p => p?.athlete?.displayName || p?.displayName).filter(Boolean), team: item?.team?.displayName || item?.team?.shortDisplayName || null, raw: item };
 }
-function normaliseCorePlay(item, index) { return normaliseEvent({ ...item, text: item.text || item.shortText || item.type?.text }, index, "core-play"); }
+function normaliseCorePlay(item, index) { return normaliseEvent({ ...item, text: item.text || item.shortText || item.alternativeText || item.type?.text }, index, "core-play"); }
+function meaningful(item) { return eventType(item) !== "other"; }
 
 async function espnApi(url) {
   try {
@@ -67,7 +85,7 @@ async function espnApi(url) {
       const coreBase = `${ESPN_CORE}/${slug}/events/${encodeURIComponent(id)}/competitions/${encodeURIComponent(id)}`;
       const [summary, plays, situation, probabilities] = await Promise.allSettled([
         readJson(summaryUrl),
-        readJson(`${coreBase}/plays?limit=300`),
+        readCorePlays(coreBase),
         readJson(`${coreBase}/situation`),
         readJson(`${coreBase}/probabilities?limit=300`)
       ]);
@@ -78,7 +96,7 @@ async function espnApi(url) {
       const coreItems = plays.status === "fulfilled" ? (plays.value.items || plays.value.plays || []) : [];
       const summaryPlays = (data.plays || []).map((p, i) => normaliseEvent(p, i, "summary-play"));
       const commentary = (data.commentary || []).map((p, i) => normaliseEvent(p, i, "commentary"));
-      const primary = coreItems.length ? coreItems.map(normaliseCorePlay) : summaryPlays;
+      const primary = coreItems.length ? coreItems.filter(meaningful).map(normaliseCorePlay) : summaryPlays.filter(e => e.type !== "other");
       const seen = new Set();
       const events = [...primary, ...commentary].filter(e => {
         const key = `${e.type}|${e.offset}|${e.text}`;
