@@ -30,8 +30,20 @@
 <div class="modal" id="setupModal">
 <div class="modal-top"><span>01 / SET UP REPLAY</span><button class="close" data-close>×</button></div>
 <h2>Choose a<br><i>programme.</i></h2>
-<p>Use an ESPN competition slug such as <b>eng.1</b> for the Premier League or <b>uefa.champions</b> for the Champions League.</p>
-<form id="setupForm"><label>Match date<input id="dateInput" type="date" required></label><label>Competition slug<input id="leagueInput" value="eng.1" required autocapitalize="none"></label><button class="primary" type="submit">Pull programme <span>↗</span></button></form>
+<p>Choose the competition in plain English. ESPN’s internal codes are handled automatically.</p>
+<form id="setupForm"><label>Match date<input id="dateInput" type="date" required></label><label>Competition<select id="leagueInput" required>
+<option value="eng.1" selected>England · Premier League</option><option value="eng.2">England · Championship</option><option value="eng.3">England · League One</option><option value="eng.4">England · League Two</option><option value="eng.fa">England · FA Cup</option><option value="eng.league_cup">England · Carabao Cup</option><option value="eng.w.1">England · Women’s Super League</option>
+<option value="sco.1">Scotland · Premiership</option><option value="sco.2">Scotland · Championship</option>
+<option value="esp.1">Spain · LaLiga</option><option value="esp.2">Spain · LaLiga 2</option><option value="esp.copa_del_rey">Spain · Copa del Rey</option>
+<option value="ger.1">Germany · Bundesliga</option><option value="ger.2">Germany · 2. Bundesliga</option><option value="ger.dfb_pokal">Germany · German Cup</option>
+<option value="ita.1">Italy · Serie A</option><option value="ita.2">Italy · Serie B</option><option value="ita.coppa_italia">Italy · Coppa Italia</option>
+<option value="fra.1">France · Ligue 1</option><option value="fra.2">France · Ligue 2</option>
+<option value="ned.1">Netherlands · Eredivisie</option><option value="por.1">Portugal · Primeira Liga</option><option value="bel.1">Belgium · Pro League</option><option value="tur.1">Turkey · Super Lig</option>
+<option value="uefa.champions">Europe · Champions League</option><option value="uefa.europa">Europe · Europa League</option><option value="uefa.europa.conf">Europe · Conference League</option><option value="uefa.wchampions">Europe · Women’s Champions League</option><option value="uefa.nations">Europe · Nations League</option>
+<option value="usa.1">USA · MLS</option><option value="usa.nwsl">USA · NWSL</option><option value="mex.1">Mexico · Liga MX</option><option value="conmebol.libertadores">South America · Libertadores</option><option value="conmebol.sudamericana">South America · Sudamericana</option>
+<option value="aus.1">Australia · A-League Men</option><option value="aus.w.1">Australia · A-League Women</option><option value="jpn.1">Japan · J.League</option><option value="ksa.1">Saudi Arabia · Pro League</option><option value="ind.1">India · Super League</option>
+<option value="fifa.world">International · World Cup</option><option value="fifa.wwc">International · Women’s World Cup</option><option value="fifa.friendly">International · Friendlies</option>
+</select></label><button class="primary" type="submit">Pull programme <span>↗</span></button></form>
 <div class="form-error" id="setupError"></div>
 </div>
 <div class="modal hidden" id="fixturesModal">
