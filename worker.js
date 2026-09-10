@@ -153,7 +153,7 @@ export class MatchRoom {
     };
   }
   async save() { this.room.lastActivity = Date.now(); await this.state.storage.put("room", this.room); await this.state.storage.setAlarm(Date.now() + 7200000); }
-  public() { return { ...this.room, predictions: undefined, playerStatus: Object.fromEntries(this.room.players.map(p => [p.id, Object.keys(this.room.predictions[p.id]?.pre || {})])) }; }
+  public() { if (this.room.fixture?.id && !this.room.preMatch?.length) this.room.preMatch = this.buildPreMatch(); return { ...this.room, predictions: undefined, playerStatus: Object.fromEntries(this.room.players.map(p => [p.id, Object.keys(this.room.predictions[p.id]?.pre || {})])) }; }
   broadcast() { const m = JSON.stringify({ type: "state", state: this.public() }); for (const ws of this.sockets) { try { ws.send(m); } catch {} } }
   schedule(ms) { this.state.storage.setAlarm(Date.now() + Math.max(250, Math.min(ms, 7200000))); }
   buildPreMatch() {
