@@ -113,41 +113,30 @@ async function espnApi(url) {
   return null;
 }
 
-async function validateLeague(league) {
-  const end = new Date(), start = new Date(Date.now() - 21 * 86400000);
-  const from = start.toISOString().slice(0, 10).replaceAll("-", ""), to = end.toISOString().slice(0, 10).replaceAll("-", "");
+async function validateLeague(league, programme) {
   try {
-    const scoreboard = await readJson(`${ESPN_SITE}/${leaguePath(league)}/scoreboard?dates=${from}-${to}`);
-    const matches = (scoreboard.events || []).filter(event => event.status?.type?.state === "post").slice(-3);
-    const rows = await Promise.all(matches.map(async (match) => {
+    const matches = programme.filter(event => event.status?.type?.state === "post").slice(-3);
+    const rows = await Promise.all(matches.map(async match => {
       try {
         const base = `${ESPN_CORE}/${leaguePath(league)}/events/${encodeURIComponent(match.id)}/competitions/${encodeURIComponent(match.id)}`;
-        const [core, summary] = await Promise.allSettled([readCorePlays(base), readJson(`${ESPN_SITE}/${leaguePath(league)}/summary?event=${encodeURIComponent(match.id)}`)]);
-        const coreItems = core.status === "fulfilled" ? (core.value.items || []) : [];
-        const rawItems = coreItems.length ? coreItems.map(item => ({ item, source: "coverage-core" })) : (summary.status === "fulfilled" ? (summary.value.plays || []).map(item => ({ item, source: "coverage-summary" })) : []);
-        const events = rawItems.map(({ item, source }, index) => normaliseEvent(item, index, source)).filter(event => event.type !== "other" && event.offset != null);
-        const types = new Set(events.map(event => event.type));
-        return { id: String(match.id), events: events.length, types: [...types] };
+        const plays = await readJson(`${base}/plays?limit=300&page=1`);
+        const events = (plays.items || []).map((item, index) => normaliseEvent(item, index, "coverage-core")).filter(event => event.type !== "other" && event.offset != null);
+        return { id: String(match.id), events: events.length, types: [...new Set(events.map(event => event.type))] };
       } catch { return { id: String(match.id), events: 0, types: [] }; }
     }));
-    const matchesWithData = rows.filter(row => row.events > 0), has = type => rows.filter(row => row.types.includes(type)).length;
-    const sampleSize = rows.length, averageEvents = sampleSize ? Math.round(rows.reduce((sum, row) => sum + row.events, 0) / sampleSize) : 0;
+    const has = type => rows.filter(row => row.types.includes(type)).length, sampleSize = rows.length;
+    const averageEvents = sampleSize ? Math.round(rows.reduce((sum, row) => sum + row.events, 0) / sampleSize) : 0;
     const approved = sampleSize >= 3 && averageEvents >= 6 && has("corner") / sampleSize >= 2 / 3 && has("foul") / sampleSize >= 2 / 3 && has("card") / sampleSize >= 1 / 3;
-    return { league, approved, checkedAt: Date.now(), sampleSize, matchesWithData: matchesWithData.length, averageEvents, coverage: { corner: has("corner"), foul: has("foul"), card: has("card"), goal: has("goal"), substitution: has("substitution"), shot: has("shot") }, reason: approved ? "sufficient timestamped event coverage" : "insufficient repeatable in-play event coverage" };
+    return { league, approved, checkedAt: Date.now(), sampleSize, matchesWithData: rows.filter(row => row.events > 0).length, averageEvents, coverage: { corner: has("corner"), foul: has("foul"), card: has("card"), goal: has("goal"), substitution: has("substitution"), shot: has("shot") }, reason: approved ? "sufficient timestamped event coverage" : "insufficient repeatable in-play event coverage" };
   } catch (error) { return { league, approved: false, checkedAt: Date.now(), sampleSize: 0, matchesWithData: 0, averageEvents: 0, coverage: {}, reason: error.message || "coverage check failed" }; }
 }
 
 async function pullFixtures() {
-  const dates = Array.from({ length: 8 }, (_, offset) => new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10));
-  const [coverageResults, fixtureResults] = await Promise.all([
-    Promise.all(SUPPORTED_LEAGUES.map(validateLeague)),
-    Promise.allSettled(SUPPORTED_LEAGUES.flatMap(league => dates.map(async date => {
-    const data = await readJson(`${ESPN_SITE}/${leaguePath(league)}/scoreboard?dates=${date.replaceAll("-", "")}`);
-    return (data.events || []).map(item => ({ ...fixture(item), league }));
-    })))
-  ]);
+  const start = new Date(Date.now() - 21 * 86400000).toISOString().slice(0, 10).replaceAll("-", ""), end = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10).replaceAll("-", "");
+  const programmes = await Promise.allSettled(SUPPORTED_LEAGUES.map(async league => ({ league, events: (await readJson(`${ESPN_SITE}/${leaguePath(league)}/scoreboard?dates=${start}-${end}`)).events || [] })));
+  const coverageResults = await Promise.all(programmes.map(result => result.status === "fulfilled" ? validateLeague(result.value.league, result.value.events) : ({ league: "unknown", approved: false, checkedAt: Date.now(), sampleSize: 0, matchesWithData: 0, averageEvents: 0, coverage: {}, reason: result.reason?.message || "programme pull failed" })));
   const coverage = Object.fromEntries(coverageResults.map(result => [result.league, result]));
-  const fixtures = fixtureResults.flatMap(result => result.status === "fulfilled" ? result.value : []).filter(f => (f.state === "in" || f.state === "pre") && coverage[f.league]?.approved);
+  const fixtures = programmes.flatMap(result => result.status === "fulfilled" ? result.value.events.map(item => ({ ...fixture(item), league: result.value.league })) : []).filter(f => (f.state === "in" || f.state === "pre") && coverage[f.league]?.approved);
   return { provider: "ESPN", fetchedAt: Date.now(), fixtures, leagueCoverage: coverage };
 }
 async function refreshFixtureIndex(env) {
