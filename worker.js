@@ -198,7 +198,7 @@ export class MatchRoom {
   async openRound(target, index) {
     const round = this.roundFor(target, index); const now = Date.now();
     const leadMs = Math.max(0, (target.offset - this.room.session.clock) * 1000);
-    const speed = this.room.session.speed || 1, warmupSeconds = Math.max(0, leadMs - 40000); round.warmupEndsAt = now + (warmupSeconds * 1000) / speed; round.voteEndsAt = round.warmupEndsAt + (30000 / speed);
+    const speed = this.room.session.speed || 1, warmupSeconds = Math.max(0, leadMs - 40000); round.warmupEndsAt = now + (warmupSeconds * 1000) / speed; round.voteEndsAt = round.warmupEndsAt + (30000 / speed); if (this.room.session.mode === "simulation" && this.room.session.clock === 0) { round.warmupEndsAt = now + 3000; round.voteEndsAt = round.warmupEndsAt + 10000; }
     if (leadMs < 40000) round.warmupEndsAt = now;
     this.room.session.round = round; this.room.session.status = "warmup"; this.room.events.unshift({ label: "Prediction warming up", detail: round.question });
     await this.save(); this.broadcast(); this.schedule(Math.max(250, round.warmupEndsAt - now));
