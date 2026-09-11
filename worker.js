@@ -383,6 +383,7 @@ export class MatchRoom {
       await this.save(); this.broadcast(); this.schedule(15000); return;
     }
     if (!r) return;
+    if (s.manualPaused) return;
     const now = Date.now(), elapsed = s.holding ? s.clock : (s.clockBase || 0) + (now - s.startedAt) / 1000 * (s.speed || 1);
     s.clock = Math.max(0, elapsed); this.settlePreMatch(s.clock);
     if (r.status === "warmup" && now >= r.warmupEndsAt) { r.status = "voting"; r.voteEndsAt = now + (s.mode === "simulation" ? 10000 : (10000 / (s.speed || 1))); if (s.mode === "simulation") s.holding = true; this.room.events.unshift({ label: "Vote now", detail: r.question }); await this.save(); this.broadcast(); this.schedule(10000); return; }
@@ -416,8 +417,15 @@ export class MatchRoom {
     if (m.type === "prematch") { const p = this.room.players.find(x => x.id === m.playerId), q = (this.room.preMatch || []).find(x => x.id === m.questionId); if (p && q && !q.settled && ((q.input && Number.isInteger(Number(m.answer)) && Number(m.answer) >= q.input.min && Number(m.answer) <= q.input.max) || q.choices.some(c => c.key === m.answer))) { this.room.predictions[p.id] ||= {}; this.room.predictions[p.id].pre ||= {}; this.room.predictions[p.id].pre[q.id] = String(m.answer); } }
     if (m.type === "start") await this.startSession();
     if (m.type === "predict") { const p = this.room.players.find(x => x.id === m.playerId), r = this.room.session.round; if (p && r?.status === "voting" && Date.now() < r.voteEndsAt && r.id === m.roundId) { this.room.predictions[p.id] ||= {}; this.room.predictions[p.id][r.id] = m.answer; if (this.room.session.mode === "simulation") { r.status = "locked"; this.room.session.holding = false; this.room.session.clockBase = this.room.session.clock; this.room.session.startedAt = Date.now(); } } }
+    if (m.type === "simulation-control" && this.room.mode === "simulation") {
+      const s = this.room.session, now = Date.now();
+      if (!s.manualPaused && !s.holding && s.status === "running") s.clock = (s.clockBase || 0) + (now - s.startedAt) / 1000 * (s.speed || 1);
+      if (m.action === "pause" && s.status === "running" && !s.holding) { s.clockBase = s.clock; s.startedAt = now; s.manualPaused = true; }
+      if (m.action === "resume" && s.manualPaused) { s.clockBase = s.clock; s.startedAt = now; s.manualPaused = false; }
+      if (m.action === "speed") { const speed = Number(m.speed); if ([1, 2, 5, 10, 20, 50].includes(speed)) { s.speed = speed; this.room.speed = speed; if (!s.manualPaused && !s.holding) { s.clockBase = s.clock; s.startedAt = now; } } }
+    }
     await this.save(); this.broadcast();
-    if (m.type === "start" || m.type === "predict" || m.type === "join") this.schedule(500);
+    if (m.type === "start" || m.type === "predict" || m.type === "join" || m.type === "simulation-control") this.schedule(500);
   }
   async closeRoom(ws) { this.sockets.delete(ws); if (this.sockets.size === 0) { if (this.room) await this.state.storage.put("room", this.room); this.schedule(30000); } }
   async webSocketClose(ws) { await this.closeRoom(ws); }
