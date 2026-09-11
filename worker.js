@@ -146,8 +146,9 @@ async function refreshFixtureIndex(env) {
 async function liveFixtures(env) {
   const id = env.FIXTURE_INDEX.idFromName("supported-fixtures");
   let response = await env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/fixtures");
-  if (response.status === 404) { await refreshFixtureIndex(env); response = await env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/fixtures"); }
-  const data = await response.json();
+  let data = await response.json();
+  const staleEmpty = response.status === 404 || (!data.fixtures?.length && Date.now() - Number(data.fetchedAt || 0) > 6 * 3600000);
+  if (staleEmpty) { await refreshFixtureIndex(env); response = await env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/fixtures"); data = await response.json(); }
   return json(data, response.status);
 }
 
@@ -241,12 +242,18 @@ export class MatchRoom {
       const competition = data.header?.competitions?.[0] || data.competitions?.[0] || {};
       const nextFixture = fixture({ id, name: competition.shortName || competition.name, date: competition.date, competitions: [{ ...competition, competitors: competition.competitors || [] }], status: competition.status });
       this.room.fixture = { ...this.room.fixture, ...nextFixture, home: { ...this.room.fixture.home, ...nextFixture.home }, away: { ...this.room.fixture.away, ...nextFixture.away } };
-      const incoming = (data.plays || []).map((p, i) => normaliseEvent(p, i, "live")).filter(e => e.offset != null && e.type !== "other");
+      const coreBase = `${ESPN_CORE}/${leaguePath(league)}/events/${encodeURIComponent(id)}/competitions/${encodeURIComponent(id)}`;
+      const [core, summary] = await Promise.allSettled([readCorePlays(coreBase), Promise.resolve(data)]);
+      const coreItems = core.status === "fulfilled" ? (core.value.items || []) : [];
+      const source = coreItems.length ? "core-live" : "summary-live-fallback";
+      const incoming = (coreItems.length ? coreItems : (summary.value?.plays || [])).map((p, i) => normaliseEvent(p, i, source)).filter(e => e.offset != null && e.type !== "other");
       const known = new Set(this.room.timeline.map(e => e.id));
       for (const e of incoming) if (!known.has(e.id)) { this.room.timeline.push({ id: e.id, type: e.type, offset: e.offset, minute: e.minute, text: e.text, team: e.team || null }); this.room.events.unshift({ label: e.type === "goal" ? "GOAL" : "Match update", detail: e.text }); }
       this.room.timeline.sort((a, b) => a.offset - b.offset);
       this.room.lastProviderEventIds = this.room.timeline.map(e => e.id);
       this.room.lastLivePollAt = Date.now();
+      this.room.provider.playsSource = source;
+      this.room.provider.playsProcessed = incoming.length;
       if (this.room.session.status === "running") this.room.session.clock = this.liveClock(nextFixture, data);
     } catch (error) { this.room.provider.error = error.message || "Live feed unavailable"; }
   }
