@@ -51,7 +51,7 @@ function renderMatch() {
   if (createRoom) createRoom.onclick = async () => {
     createRoom.disabled = true; createRoom.textContent = "Creating room…";
     try {
-      const r = await fetch("/api/room", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ fixture: f, league: state.league, events }) });
+      const r = await fetch("/api/room", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ fixture: f, league: state.league, events, mode: "simulation", speed: state.speed }) });
       const d = await r.json(); if (!r.ok) throw Error(d.error || "Could not create room");
       location.href = `/play?room=${encodeURIComponent(d.roomId)}&role=host`;
     } catch (err) { createRoom.disabled = false; createRoom.textContent = "Create prediction room ↗"; alert(err.message); }
