@@ -155,6 +155,8 @@ async function liveFixtures(env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.pathname === "/admin" || url.pathname === "/admin/") return env.ASSETS.fetch(new Request(new URL("/admin.html", request.url), request));
+    if (url.pathname === "/api/admin/refresh-fixtures" && request.method === "POST") return refreshFixtureIndex(env);
     if (url.pathname === "/api/live-fixtures") return liveFixtures(env);
     if (url.pathname.startsWith("/api/espn/")) { const response = await espnApi(url); if (response) return response; }
     if (url.pathname === "/api/room/fixture" && request.method === "POST") {

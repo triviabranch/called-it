@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#e8dfcc" />
+    <link rel="icon" href="assets/called-it-logo.png" />
+    <link rel="stylesheet" href="admin.css" />
+    <title>Called It — Live Admin</title>
+  </head>
+  <body>
+    <main class="admin-shell">
+      <header class="admin-header"><a class="brand" href="/"><img src="assets/called-it-wordmark.png" alt="Called It" /></a><a class="back-link" href="/">Back to site ↗</a></header>
+      <section class="admin-hero">
+        <p class="eyebrow">Live operations</p>
+        <h1>Fixture<br><i>control.</i></h1>
+        <p>Refresh the ESPN fixture index, validate event coverage, and publish only the leagues that can support live play-along. Rooms are still created lazily when a player opens a fixture.</p>
+        <button id="refresh-button" class="button" type="button">Run fixture refresh <span>↻</span></button>
+        <p id="status" class="status" role="status" aria-live="polite">Ready. The scheduled job runs daily.</p>
+      </section>
+      <section id="result" hidden>
+        <div id="summary" class="summary"></div>
+        <h2>League coverage</h2>
+        <div id="coverage" class="coverage"></div>
+      </section>
+    </main>
+    <script src="admin.js"></script>
+  </body>
+</html>
