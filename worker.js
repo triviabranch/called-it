@@ -3,6 +3,7 @@ const ESPN_CORE = "https://sports.core.api.espn.com/v2/sports/soccer/leagues";
 const SUPPORTED_LEAGUES = ["eng.1", "eng.2", "sco.1", "esp.1", "ger.1", "ita.1", "fra.1", "usa.1", "aus.1"];
 const LEAGUE_HIERARCHY = Object.fromEntries(SUPPORTED_LEAGUES.map((league, index) => [league, index]));
 const LEAGUE_NAMES = { "eng.1": "Premier League", "eng.2": "Championship", "sco.1": "Scottish Premiership", "esp.1": "LaLiga", "ger.1": "Bundesliga", "ita.1": "Serie A", "fra.1": "Ligue 1", "usa.1": "MLS", "aus.1": "A-League Men" };
+const DEFAULT_BROADCAST_RULES = { ukPremierLeagueSaturdayBlackout: true };
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "access-control-allow-origin": "*" } });
@@ -141,18 +142,18 @@ function inUkSaturdayClosedPeriod(value) {
   return parts.weekday === "Sat" && minutes >= 14 * 60 + 45 && minutes < 17 * 60 + 15;
 }
 
-async function pullFixtures() {
+async function pullFixtures(broadcastRules = DEFAULT_BROADCAST_RULES) {
   const start = new Date(Date.now() - 21 * 86400000).toISOString().slice(0, 10).replaceAll("-", ""), end = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10).replaceAll("-", "");
   const programmes = await Promise.allSettled(SUPPORTED_LEAGUES.map(async league => ({ league, events: (await readJson(`${ESPN_SITE}/${leaguePath(league)}/scoreboard?dates=${start}-${end}`)).events || [] })));
   const coverageResults = await Promise.all(programmes.map(result => result.status === "fulfilled" ? validateLeague(result.value.league, result.value.events) : ({ league: "unknown", approved: false, checkedAt: Date.now(), sampleSize: 0, matchesWithData: 0, averageEvents: 0, coverage: {}, reason: result.reason?.message || "programme pull failed" })));
   const coverage = Object.fromEntries(coverageResults.map(result => [result.league, result]));
-  const fixtures = programmes.flatMap(result => result.status === "fulfilled" ? result.value.events.map(item => ({ ...fixture(item), league: result.value.league, competition: LEAGUE_NAMES[result.value.league] || result.value.league })) : []).filter(f => (f.state === "in" || f.state === "pre") && coverage[f.league]?.approved && (f.league !== "eng.1" || !inUkSaturdayClosedPeriod(f.date))).sort((a, b) => {
+  const fixtures = programmes.flatMap(result => result.status === "fulfilled" ? result.value.events.map(item => ({ ...fixture(item), league: result.value.league, competition: LEAGUE_NAMES[result.value.league] || result.value.league })) : []).filter(f => (f.state === "in" || f.state === "pre") && coverage[f.league]?.approved && (!broadcastRules.ukPremierLeagueSaturdayBlackout || f.league !== "eng.1" || !inUkSaturdayClosedPeriod(f.date))).sort((a, b) => {
     const byKickoff = new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime();
     if (byKickoff) return byKickoff;
     const byCompetition = (LEAGUE_HIERARCHY[a.league] ?? 999) - (LEAGUE_HIERARCHY[b.league] ?? 999);
     return byCompetition || a.name.localeCompare(b.name);
   });
-  return { provider: "ESPN", fetchedAt: Date.now(), fixtures, leagueCoverage: coverage };
+  return { provider: "ESPN", fetchedAt: Date.now(), fixtures, leagueCoverage: coverage, broadcastRules };
 }
 async function refreshFixtureIndex(env) {
   const id = env.FIXTURE_INDEX.idFromName("supported-fixtures");
@@ -183,6 +184,7 @@ export default {
     }
     if (url.pathname === "/admin" || url.pathname === "/admin/") return env.ASSETS.fetch(new Request(new URL("/admin.html", request.url), request));
     if (url.pathname === "/api/admin/refresh-fixtures" && request.method === "POST") return refreshFixtureIndex(env);
+    if (url.pathname === "/api/admin/fixture-config" && (request.method === "GET" || request.method === "POST")) { const id = env.FIXTURE_INDEX.idFromName("supported-fixtures"); return env.FIXTURE_INDEX.get(id).fetch(new Request(`https://fixture-index/config`, { method: request.method, body: request.method === "POST" ? await request.text() : undefined, headers: request.method === "POST" ? { "content-type": "application/json" } : undefined })); }
     if (url.pathname === "/api/live-fixtures") return liveFixtures(env);
     if (url.pathname.startsWith("/api/espn/")) { const response = await espnApi(url); if (response) return response; }
     if (url.pathname === "/api/room/fixture" && request.method === "POST") {
@@ -205,8 +207,16 @@ export class FixtureIndex {
   constructor(state) { this.state = state; }
   async fetch(request) {
     if (request.method === "POST" && new URL(request.url).pathname === "/refresh") {
-      try { const data = await pullFixtures(); await this.state.storage.put("index", data); return json({ ...data, refreshed: true }); }
+      try { const broadcastRules = { ...DEFAULT_BROADCAST_RULES, ...(await this.state.storage.get("broadcastRules") || {}) }; const data = await pullFixtures(broadcastRules); await this.state.storage.put("index", data); return json({ ...data, refreshed: true }); }
       catch (error) { return json({ error: error.message || "Could not refresh fixture index" }, 502); }
+    }
+    if (request.method === "GET" && new URL(request.url).pathname === "/config") {
+      const broadcastRules = { ...DEFAULT_BROADCAST_RULES, ...(await this.state.storage.get("broadcastRules") || {}) };
+      return json({ broadcastRules });
+    }
+    if (request.method === "POST" && new URL(request.url).pathname === "/config") {
+      try { const input = await request.json(); const broadcastRules = { ...DEFAULT_BROADCAST_RULES, ukPremierLeagueSaturdayBlackout: input.broadcastRules?.ukPremierLeagueSaturdayBlackout !== false }; await this.state.storage.put("broadcastRules", broadcastRules); return json({ broadcastRules, saved: true }); }
+      catch (error) { return json({ error: error.message || "Could not save fixture configuration" }, 400); }
     }
     if (request.method === "POST" && new URL(request.url).pathname === "/remove") {
       try {

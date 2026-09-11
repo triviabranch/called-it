@@ -3,8 +3,35 @@ const status = document.querySelector("#status");
 const result = document.querySelector("#result");
 const summary = document.querySelector("#summary");
 const coverage = document.querySelector("#coverage");
+const blackoutRule = document.querySelector("#blackout-rule");
+const saveConfig = document.querySelector("#save-config");
+const configStatus = document.querySelector("#config-status");
 const esc = value => String(value ?? "").replace(/[&<>\"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", "\"":"&quot;", "'":"&#039;" }[c]));
 fetch("/api/build-id").then(response => response.json()).then(data => { document.querySelector("#build-id").textContent = data.buildId || "local"; }).catch(() => { document.querySelector("#build-id").textContent = "local"; });
+
+const loadConfig = async () => {
+  try {
+    const response = await fetch("/api/admin/fixture-config");
+    const data = await response.json();
+    if (!response.ok) throw Error(data.error || "Could not load rules");
+    blackoutRule.checked = data.broadcastRules?.ukPremierLeagueSaturdayBlackout !== false;
+    configStatus.textContent = "Saved rules loaded.";
+  } catch (error) { configStatus.textContent = error.message || "Could not load saved rules."; }
+};
+
+saveConfig.onclick = async () => {
+  saveConfig.disabled = true;
+  configStatus.textContent = "Saving…";
+  try {
+    const response = await fetch("/api/admin/fixture-config", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ broadcastRules: { ukPremierLeagueSaturdayBlackout: blackoutRule.checked } }) });
+    const data = await response.json();
+    if (!response.ok) throw Error(data.error || "Could not save rules");
+    configStatus.textContent = "Saved. Run fixture refresh to apply this rule.";
+  } catch (error) { configStatus.textContent = error.message || "Could not save rules."; }
+  finally { saveConfig.disabled = false; }
+};
+
+loadConfig();
 
 button.onclick = async () => {
   button.disabled = true;

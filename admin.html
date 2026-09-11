@@ -6,6 +6,17 @@
     <meta name="theme-color" content="#e8dfcc" />
     <link rel="icon" href="assets/called-it-logo.png" />
     <link rel="stylesheet" href="admin.css" />
+    <style>
+      .admin-config { margin-top: 1.5rem; padding: 1.25rem; border: 1px solid rgba(18, 31, 48, .16); border-radius: 18px; background: rgba(255, 255, 255, .42); }
+      .admin-config h2 { margin: .2rem 0 .8rem; font-size: 1.25rem; }
+      .config-toggle { display: flex; gap: .8rem; align-items: flex-start; cursor: pointer; }
+      .config-toggle input { width: 1.2rem; height: 1.2rem; margin-top: .15rem; accent-color: #d85a32; }
+      .config-toggle span { display: grid; gap: .25rem; }
+      .config-toggle small { max-width: 42rem; line-height: 1.45; opacity: .72; }
+      .config-save { margin-top: 1rem; }
+      .config-status { margin-bottom: 0; }
+      @media (max-width: 620px) { .admin-config { padding: 1rem; } }
+    </style>
     <title>Called It — Live Admin</title>
   </head>
   <body>
@@ -17,6 +28,16 @@
         <p>Refresh the ESPN fixture index, validate event coverage, and publish only the leagues that can support live play-along. Rooms are still created lazily when a player opens a fixture.</p>
         <button id="refresh-button" class="button" type="button">Run fixture refresh <span>↻</span></button>
         <p id="status" class="status" role="status" aria-live="polite">Ready. The scheduled job runs daily.</p>
+      </section>
+      <section class="admin-config" aria-labelledby="broadcast-rules-title">
+        <p class="eyebrow">Eligibility rules</p>
+        <h2 id="broadcast-rules-title">Broadcast availability</h2>
+        <label class="config-toggle">
+          <input id="blackout-rule" type="checkbox" checked />
+          <span><strong>Apply the UK Saturday blackout to Premier League</strong><small>Exclude Saturday 14:45–17:15 UK kick-offs. Championship and lower leagues are not affected.</small></span>
+        </label>
+        <button id="save-config" class="button config-save" type="button">Save broadcast rules</button>
+        <p id="config-status" class="status config-status" role="status" aria-live="polite">Loading saved rules…</p>
       </section>
       <section id="result" hidden>
         <div id="summary" class="summary"></div>
