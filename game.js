@@ -1,4 +1,4 @@
-let ws, roomId, state, playerId, role;
+let ws, roomId, state, playerId, role, submittedRoundId = null;
 const app = document.querySelector("#app"), query = new URLSearchParams(location.search);
 const esc = value => String(value ?? "").replace(/[&<>\"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'\"':"&quot;"}[c]));
 const clock = seconds => { const s = Math.max(0, Math.floor(seconds || 0)); return `${String(Math.floor(s / 60)).padStart(2,"0")}:${String(s % 60).padStart(2,"0")}`; };
@@ -39,7 +39,8 @@ function render() {
   const joinButton = document.querySelector("#join"); if (joinButton) joinButton.onclick = () => { const name = document.querySelector("#name").value || "Supporter"; joinButton.disabled = true; send({type:"join", name, playerId}); };
   document.querySelectorAll("[data-pre]").forEach(button => button.onclick = () => { const q = (state.preMatch || []).find(item => item.choices.some(a => a.key === button.dataset.pre) && !(state.playerStatus?.[playerId] || []).includes(item.id)); send({type:"prematch", playerId, questionId:q?.id, answer:button.dataset.pre}); });
   document.querySelectorAll("[data-pre-submit]").forEach(button => button.onclick = () => send({type:"prematch", playerId, questionId:button.dataset.preSubmit, answer:document.querySelector("#preNumber")?.value}));
-  document.querySelectorAll("[data-answer]").forEach(button => button.onclick = () => { button.disabled = true; send({type:"predict", playerId, roundId:r?.id, answer:button.dataset.answer}); });
+  document.querySelectorAll("[data-answer]").forEach(button => button.onclick = () => { button.disabled = true; submittedRoundId = r?.id || null; send({type:"predict", playerId, roundId:r?.id, answer:button.dataset.answer}); render(); });
+  if (r?.status === "voting" && submittedRoundId === r.id) { const card = document.querySelector(".live-card"); if (card) { card.classList.add("submitted"); card.querySelector(".answers")?.remove(); const note = document.createElement("p"); note.className = "muted submitted-note"; note.textContent = "Call submitted. Keep watching the match."; card.appendChild(note); } }
   if (r?.status === "voting") setTimeout(render, 1000);
 }
 roomId = query.get("room"); role = query.get("role") || "player";

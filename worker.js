@@ -197,7 +197,9 @@ export class MatchRoom {
   async fetch(request) {
     if (request.headers.get("Upgrade") === "websocket") {
       const pair = new WebSocketPair(); this.state.acceptWebSocket(pair[1]); this.sockets.add(pair[1]);
-      if (!this.room) await this.load(); pair[1].send(JSON.stringify({ type: "state", state: this.public() }));
+      if (!this.room) await this.load();
+      if (this.room.fixture?.id && this.room.mode === "live") { await this.refreshLive(); await this.save(); }
+      pair[1].send(JSON.stringify({ type: "state", state: this.public() }));
       return new Response(null, { status: 101, webSocket: pair[0] });
     }
     if (request.method === "POST" && !this.room) {
