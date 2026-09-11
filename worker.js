@@ -18,6 +18,7 @@ async function readCorePlays(baseUrl) {
   const pages = await Promise.all(Array.from({ length: pageCount - 1 }, (_, i) => readJson(`${baseUrl}/plays?limit=300&page=${i + 2}`)));
   return { ...first, items: [ ...(first.items || []), ...pages.flatMap(page => page.items || []) ] };
 }
+async function readCorePlayPage(baseUrl) { return readJson(`${baseUrl}/plays?limit=300&page=1`); }
 function fixture(item) {
   const competition = item?.competitions?.[0] || {};
   const teams = competition.competitors || [];
@@ -253,7 +254,8 @@ export class MatchRoom {
       const nextFixture = fixture({ id, name: competition.shortName || competition.name, date: competition.date, competitions: [{ ...competition, competitors: competition.competitors || [] }], status: competition.status });
       this.room.fixture = { ...this.room.fixture, ...nextFixture, home: { ...this.room.fixture.home, ...nextFixture.home }, away: { ...this.room.fixture.away, ...nextFixture.away } };
       const coreBase = `${ESPN_CORE}/${leaguePath(league)}/events/${encodeURIComponent(id)}/competitions/${encodeURIComponent(id)}`;
-      const [core, summary] = await Promise.allSettled([readCorePlays(coreBase), Promise.resolve(data)]);
+      const now = Date.now(), paginateCore = !this.room.lastCorePaginationAt || now - this.room.lastCorePaginationAt >= 60000;
+      const [core, summary] = await Promise.allSettled([paginateCore ? readCorePlays(coreBase) : readCorePlayPage(coreBase), Promise.resolve(data)]);
       const coreItems = core.status === "fulfilled" ? (core.value.items || []) : [];
       const source = coreItems.length ? "core-live" : "summary-live-fallback";
       const incoming = (coreItems.length ? coreItems : (summary.value?.plays || [])).map((p, i) => normaliseEvent(p, i, source)).filter(e => e.offset != null && e.type !== "other");
@@ -273,6 +275,9 @@ export class MatchRoom {
       this.room.lastLivePollAt = Date.now();
       this.room.provider.playsSource = source;
       this.room.provider.playsProcessed = incoming.length;
+      this.room.provider.pollIntervalSeconds = 15;
+      this.room.provider.corePaginationIntervalSeconds = 60;
+      if (paginateCore) this.room.lastCorePaginationAt = now;
       if (this.room.session.status === "running") this.room.session.clock = this.liveClock(nextFixture, data);
     } catch (error) { this.room.provider.error = error.message || "Live feed unavailable"; }
   }
@@ -335,7 +340,7 @@ export class MatchRoom {
       this.settlePreMatch(s.clock);
       if (s.status === "running" && (!s.round || s.round.status === "settled") && this.room.fixture.state === "in" && Date.now() >= (s.nextQuestionAt || 0)) { await this.openLiveRound(); return; }
       if (s.round?.status === "voting" && Date.now() >= s.round.voteEndsAt) { await this.settleLiveRound(s.round); return; }
-      if (s.status === "running" && this.room.fixture.state === "post") { s.status = "complete"; await this.save(); this.broadcast(); return; }
+      if (s.status === "running" && this.room.fixture.state === "post") { s.status = "complete"; await this.save(); await this.state.storage.deleteAlarm(); this.broadcast(); return; }
       await this.save(); this.broadcast(); this.schedule(15000); return;
     }
     if (!r) return;
