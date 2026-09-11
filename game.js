@@ -36,7 +36,7 @@ function preMatchCard(me) {
   return `<div class="pre-modal-backdrop"><div class="pre-modal"><div class="phase">Your pre-match calls · ${answered.length + 1} of ${questions.length}</div><h2>${esc(current.question)}</h2><p class="muted">Make your call before kick-off.</p>${answerUi}</div></div>`;
 }
 function simulationPanel() {
-  if (role !== "host" || state.session?.mode !== "simulation") return "";
+  if (role !== "host" || state.mode !== "simulation") return "";
   const s = state.session, paused = s.manualPaused, held = s.holding && s.round?.status === "voting";
   const status = s.status === "lobby" ? "Ready to start" : paused ? "Playback paused" : held ? "Paused for voting" : `Running · ${s.speed || 1}×`;
   const action = paused ? "resume" : "pause";
