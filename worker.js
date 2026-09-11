@@ -260,6 +260,15 @@ export class MatchRoom {
       const known = new Set(this.room.timeline.map(e => e.id));
       for (const e of incoming) if (!known.has(e.id)) { this.room.timeline.push({ id: e.id, type: e.type, offset: e.offset, minute: e.minute, text: e.text, team: e.team || null }); this.room.events.unshift({ label: e.type === "goal" ? "GOAL" : "Match update", detail: e.text }); }
       this.room.timeline.sort((a, b) => a.offset - b.offset);
+      const homeName = String(this.room.fixture.home?.name || "").toLowerCase();
+      const awayName = String(this.room.fixture.away?.name || "").toLowerCase();
+      const goals = this.room.timeline.filter(event => event.type === "goal");
+      const homeGoals = goals.filter(event => String(event.team || "").toLowerCase() === homeName).length;
+      const awayGoals = goals.filter(event => String(event.team || "").toLowerCase() === awayName).length;
+      if (homeGoals || awayGoals) {
+        this.room.fixture.home.score = Math.max(Number(this.room.fixture.home.score) || 0, homeGoals);
+        this.room.fixture.away.score = Math.max(Number(this.room.fixture.away.score) || 0, awayGoals);
+      }
       this.room.lastProviderEventIds = this.room.timeline.map(e => e.id);
       this.room.lastLivePollAt = Date.now();
       this.room.provider.playsSource = source;
@@ -366,7 +375,7 @@ export class MatchRoom {
     await this.save(); this.broadcast();
     if (m.type === "start" || m.type === "predict" || m.type === "join") this.schedule(500);
   }
-  async closeRoom(ws) { this.sockets.delete(ws); if (this.sockets.size === 0) { if (this.room) { await this.state.storage.delete("room"); this.room = null; } await this.state.storage.deleteAlarm(); } }
+  async closeRoom(ws) { this.sockets.delete(ws); if (this.sockets.size === 0) { if (this.room) await this.state.storage.put("room", this.room); this.schedule(30000); } }
   async webSocketClose(ws) { await this.closeRoom(ws); }
   async webSocketError(ws) { await this.closeRoom(ws); }
   async alarm() { if (this.sockets.size === 0) { if (this.room) { await this.state.storage.delete("room"); this.room = null; } await this.state.storage.deleteAlarm(); } else { await this.load(); await this.advance(); } }
