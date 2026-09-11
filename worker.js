@@ -2,6 +2,7 @@ const ESPN_SITE = "https://site.web.api.espn.com/apis/site/v2/sports/soccer";
 const ESPN_CORE = "https://sports.core.api.espn.com/v2/sports/soccer/leagues";
 const SUPPORTED_LEAGUES = ["eng.1", "eng.2", "sco.1", "esp.1", "ger.1", "ita.1", "fra.1", "usa.1", "aus.1"];
 const LEAGUE_HIERARCHY = Object.fromEntries(SUPPORTED_LEAGUES.map((league, index) => [league, index]));
+const LEAGUE_NAMES = { "eng.1": "Premier League", "eng.2": "Championship", "sco.1": "Scottish Premiership", "esp.1": "LaLiga", "ger.1": "Bundesliga", "ita.1": "Serie A", "fra.1": "Ligue 1", "usa.1": "MLS", "aus.1": "A-League Men" };
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "access-control-allow-origin": "*" } });
@@ -83,7 +84,7 @@ async function espnApi(url) {
       const date = url.searchParams.get("date");
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date || "")) return json({ error: "date must be YYYY-MM-DD" }, 400);
       const data = await readJson(`${ESPN_SITE}/${slug}/scoreboard?dates=${date.replaceAll("-", "")}`);
-      return json({ provider: "ESPN", league, date, fixtures: (data.events || []).map(fixture), raw: data });
+      return json({ provider: "ESPN", league, date, fixtures: (data.events || []).map(item => ({ ...fixture(item), league, competition: LEAGUE_NAMES[league] || league })), raw: data });
     }
     if (bits[2] === "match" && bits[3]) {
       const id = bits[3];
@@ -138,7 +139,7 @@ async function pullFixtures() {
   const programmes = await Promise.allSettled(SUPPORTED_LEAGUES.map(async league => ({ league, events: (await readJson(`${ESPN_SITE}/${leaguePath(league)}/scoreboard?dates=${start}-${end}`)).events || [] })));
   const coverageResults = await Promise.all(programmes.map(result => result.status === "fulfilled" ? validateLeague(result.value.league, result.value.events) : ({ league: "unknown", approved: false, checkedAt: Date.now(), sampleSize: 0, matchesWithData: 0, averageEvents: 0, coverage: {}, reason: result.reason?.message || "programme pull failed" })));
   const coverage = Object.fromEntries(coverageResults.map(result => [result.league, result]));
-  const fixtures = programmes.flatMap(result => result.status === "fulfilled" ? result.value.events.map(item => ({ ...fixture(item), league: result.value.league })) : []).filter(f => (f.state === "in" || f.state === "pre") && coverage[f.league]?.approved).sort((a, b) => {
+  const fixtures = programmes.flatMap(result => result.status === "fulfilled" ? result.value.events.map(item => ({ ...fixture(item), league: result.value.league, competition: LEAGUE_NAMES[result.value.league] || result.value.league })) : []).filter(f => (f.state === "in" || f.state === "pre") && coverage[f.league]?.approved).sort((a, b) => {
     const byKickoff = new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime();
     if (byKickoff) return byKickoff;
     const byCompetition = (LEAGUE_HIERARCHY[a.league] ?? 999) - (LEAGUE_HIERARCHY[b.league] ?? 999);
