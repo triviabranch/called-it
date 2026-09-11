@@ -146,7 +146,7 @@ async function pullFixtures() {
   const programmes = await Promise.allSettled(SUPPORTED_LEAGUES.map(async league => ({ league, events: (await readJson(`${ESPN_SITE}/${leaguePath(league)}/scoreboard?dates=${start}-${end}`)).events || [] })));
   const coverageResults = await Promise.all(programmes.map(result => result.status === "fulfilled" ? validateLeague(result.value.league, result.value.events) : ({ league: "unknown", approved: false, checkedAt: Date.now(), sampleSize: 0, matchesWithData: 0, averageEvents: 0, coverage: {}, reason: result.reason?.message || "programme pull failed" })));
   const coverage = Object.fromEntries(coverageResults.map(result => [result.league, result]));
-  const fixtures = programmes.flatMap(result => result.status === "fulfilled" ? result.value.events.map(item => ({ ...fixture(item), league: result.value.league, competition: LEAGUE_NAMES[result.value.league] || result.value.league })) : []).filter(f => (f.state === "in" || f.state === "pre") && coverage[f.league]?.approved && !inUkSaturdayClosedPeriod(f.date)).sort((a, b) => {
+  const fixtures = programmes.flatMap(result => result.status === "fulfilled" ? result.value.events.map(item => ({ ...fixture(item), league: result.value.league, competition: LEAGUE_NAMES[result.value.league] || result.value.league })) : []).filter(f => (f.state === "in" || f.state === "pre") && coverage[f.league]?.approved && (f.league !== "eng.1" || !inUkSaturdayClosedPeriod(f.date))).sort((a, b) => {
     const byKickoff = new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime();
     if (byKickoff) return byKickoff;
     const byCompetition = (LEAGUE_HIERARCHY[a.league] ?? 999) - (LEAGUE_HIERARCHY[b.league] ?? 999);
