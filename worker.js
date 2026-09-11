@@ -138,7 +138,7 @@ export class MatchRoom {
         if (input.fixture) {
           this.room.fixture = input.fixture;
           this.room.provider = { name: "ESPN", league: input.league || "eng.1", eventId: input.fixture.id, error: null };
-          this.room.timeline = (input.events || []).filter(e => e && e.offset != null).map(e => ({ id: String(e.id), type: e.type, offset: Number(e.offset), minute: e.minute, text: e.text, team: e.team || null })); this.room.preMatch = this.buildPreMatch();
+          this.room.timeline = (input.events || []).filter(e => e && e.offset != null).map(e => ({ id: String(e.id), type: e.type, offset: Number(e.offset), minute: e.minute, text: e.text, team: e.team || null })); this.room.mode = input.mode === "simulation" ? "simulation" : "live"; this.room.speed = Math.max(1, Math.min(50, Number(input.speed) || 1)); this.room.preMatch = this.buildPreMatch();
         }
       } catch {}
       await this.save(); return Response.json({ roomId: this.state.id.toString(), state: this.public() });
@@ -148,7 +148,7 @@ export class MatchRoom {
   async load() {
     this.room = await this.state.storage.get("room") || {
       createdAt: Date.now(), lastActivity: Date.now(), fixture: null, provider: { name: "ESPN", league: "eng.1", eventId: null, error: null },
-      timeline: [], preMatch: [], session: { status: "lobby", startedAt: null, round: null, clock: 0 }, players: [], predictions: {}, leaderboard: [],
+      timeline: [], preMatch: [], mode: "live", speed: 1, session: { status: "lobby", startedAt: null, round: null, clock: 0, speed: 1 }, players: [], predictions: {}, leaderboard: [],
       events: [{ label: "Room opened", detail: "Powered by ESPN" }]
     };
   }
@@ -192,20 +192,20 @@ export class MatchRoom {
   async startSession() {
     const first = this.nextTarget(0);
     if (!first) { this.room.session.status = "complete"; return; }
-    this.room.session = { status: "running", startedAt: Date.now(), round: null, clock: 0, nextRoundIndex: 0 };
+    this.room.session = { status: "running", startedAt: Date.now(), round: null, clock: 0, nextRoundIndex: 0, mode: this.room.mode || "live", speed: this.room.mode === "simulation" ? (this.room.speed || 1) : 1 };
     await this.openRound(first, 0);
   }
   async openRound(target, index) {
     const round = this.roundFor(target, index); const now = Date.now();
     const leadMs = Math.max(0, (target.offset - this.room.session.clock) * 1000);
-    round.warmupEndsAt = now + Math.max(0, leadMs - 40000); round.voteEndsAt = round.warmupEndsAt + 30000;
+    const speed = this.room.session.speed || 1, warmupSeconds = Math.max(0, leadMs - 40000); round.warmupEndsAt = now + (warmupSeconds * 1000) / speed; round.voteEndsAt = round.warmupEndsAt + (30000 / speed);
     if (leadMs < 40000) round.warmupEndsAt = now;
     this.room.session.round = round; this.room.session.status = "warmup"; this.room.events.unshift({ label: "Prediction warming up", detail: round.question });
     await this.save(); this.broadcast(); this.schedule(Math.max(250, round.warmupEndsAt - now));
   }
   async advance() {
     const s = this.room.session, r = s.round; if (!r) return;
-    const now = Date.now(), elapsed = (now - s.startedAt) / 1000;
+    const now = Date.now(), elapsed = (now - s.startedAt) / 1000 * (s.speed || 1);
     s.clock = Math.max(0, elapsed); this.settlePreMatch(s.clock);
     if (r.status === "warmup" && now >= r.warmupEndsAt) { r.status = "voting"; r.voteEndsAt = now + 10000; this.room.events.unshift({ label: "Vote now", detail: r.question }); await this.save(); this.broadcast(); this.schedule(10000); return; }
     if (r.status === "voting" && now >= r.voteEndsAt) { r.status = "locked"; await this.settleRound(r); return; }
