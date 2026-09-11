@@ -151,12 +151,19 @@ async function refreshFixtureIndex(env) {
   const id = env.FIXTURE_INDEX.idFromName("supported-fixtures");
   return env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/refresh", { method: "POST" });
 }
+async function removeFixtureFromIndex(env, eventId) {
+  if (!env?.FIXTURE_INDEX || !eventId) return;
+  const id = env.FIXTURE_INDEX.idFromName("supported-fixtures");
+  await env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/remove", { method: "POST", body: JSON.stringify({ eventId }), headers: { "content-type": "application/json" } });
+}
 async function liveFixtures(env) {
   const id = env.FIXTURE_INDEX.idFromName("supported-fixtures");
   let response = await env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/fixtures");
   let data = await response.json();
   const staleEmpty = response.status === 404 || (!data.fixtures?.length && Date.now() - Number(data.fetchedAt || 0) > 6 * 3600000);
   if (staleEmpty) { await refreshFixtureIndex(env); response = await env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/fixtures"); data = await response.json(); }
+  const staleCutoff = Date.now() - 5 * 3600000;
+  data.fixtures = (data.fixtures || []).filter(item => item.state !== "in" || new Date(item.date || 0).getTime() > staleCutoff);
   return json(data, response.status);
 }
 
@@ -193,6 +200,16 @@ export class FixtureIndex {
     if (request.method === "POST" && new URL(request.url).pathname === "/refresh") {
       try { const data = await pullFixtures(); await this.state.storage.put("index", data); return json({ ...data, refreshed: true }); }
       catch (error) { return json({ error: error.message || "Could not refresh fixture index" }, 502); }
+    }
+    if (request.method === "POST" && new URL(request.url).pathname === "/remove") {
+      try {
+        const input = await request.json(), data = await this.state.storage.get("index");
+        if (!data) return json({ removed: false });
+        const before = data.fixtures?.length || 0;
+        data.fixtures = (data.fixtures || []).filter(item => String(item.id) !== String(input.eventId));
+        if (data.fixtures.length !== before) await this.state.storage.put("index", data);
+        return json({ removed: data.fixtures.length !== before });
+      } catch (error) { return json({ error: error.message || "Could not remove fixture" }, 400); }
     }
     const data = await this.state.storage.get("index");
     return data ? json(data) : json({ error: "Fixture index has not been refreshed yet" }, 404);
@@ -345,7 +362,7 @@ export class MatchRoom {
       this.settlePreMatch(s.clock);
       if (s.status === "running" && (!s.round || s.round.status === "settled") && this.room.fixture.state === "in" && Date.now() >= (s.nextQuestionAt || 0)) { await this.openLiveRound(); return; }
       if (s.round?.status === "voting" && Date.now() >= s.round.voteEndsAt) { await this.settleLiveRound(s.round); return; }
-      if (s.status === "running" && this.room.fixture.state === "post") { s.status = "complete"; await this.save(); await this.state.storage.deleteAlarm(); this.broadcast(); return; }
+      if (s.status === "running" && this.room.fixture.state === "post") { s.status = "complete"; await removeFixtureFromIndex(this.env, this.room.fixture.id); await this.save(); await this.state.storage.deleteAlarm(); this.broadcast(); return; }
       await this.save(); this.broadcast(); this.schedule(15000); return;
     }
     if (!r) return;
