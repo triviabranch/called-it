@@ -163,6 +163,10 @@ async function liveFixtures(env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.pathname === "/api/build-id") {
+      const id = env.CF_VERSION_METADATA?.id || env.COMMIT_SHA || "local";
+      return json({ buildId: String(id).slice(0, 12) });
+    }
     if (url.pathname === "/admin" || url.pathname === "/admin/") return env.ASSETS.fetch(new Request(new URL("/admin.html", request.url), request));
     if (url.pathname === "/api/admin/refresh-fixtures" && request.method === "POST") return refreshFixtureIndex(env);
     if (url.pathname === "/api/live-fixtures") return liveFixtures(env);

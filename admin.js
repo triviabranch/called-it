@@ -4,6 +4,7 @@ const result = document.querySelector("#result");
 const summary = document.querySelector("#summary");
 const coverage = document.querySelector("#coverage");
 const esc = value => String(value ?? "").replace(/[&<>\"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", "\"":"&quot;", "'":"&#039;" }[c]));
+fetch("/api/build-id").then(response => response.json()).then(data => { document.querySelector("#build-id").textContent = data.buildId || "local"; }).catch(() => { document.querySelector("#build-id").textContent = "local"; });
 
 button.onclick = async () => {
   button.disabled = true;
