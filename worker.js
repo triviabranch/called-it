@@ -1,5 +1,6 @@
 const ESPN_SITE = "https://site.web.api.espn.com/apis/site/v2/sports/soccer";
 const ESPN_CORE = "https://sports.core.api.espn.com/v2/sports/soccer/leagues";
+const SUPPORTED_LEAGUES = ["eng.1", "eng.2", "sco.1", "esp.1", "ger.1", "ita.1", "fra.1", "usa.1", "aus.1"];
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "access-control-allow-origin": "*" } });
@@ -112,17 +113,87 @@ async function espnApi(url) {
   return null;
 }
 
+async function validateLeague(league) {
+  const end = new Date(), start = new Date(Date.now() - 21 * 86400000);
+  const from = start.toISOString().slice(0, 10).replaceAll("-", ""), to = end.toISOString().slice(0, 10).replaceAll("-", "");
+  try {
+    const scoreboard = await readJson(`${ESPN_SITE}/${leaguePath(league)}/scoreboard?dates=${from}-${to}`);
+    const matches = (scoreboard.events || []).filter(event => event.status?.type?.state === "post").slice(-3);
+    const rows = await Promise.all(matches.map(async (match) => {
+      try {
+        const base = `${ESPN_CORE}/${leaguePath(league)}/events/${encodeURIComponent(match.id)}/competitions/${encodeURIComponent(match.id)}`;
+        const [core, summary] = await Promise.allSettled([readCorePlays(base), readJson(`${ESPN_SITE}/${leaguePath(league)}/summary?event=${encodeURIComponent(match.id)}`)]);
+        const coreItems = core.status === "fulfilled" ? (core.value.items || []) : [];
+        const rawItems = coreItems.length ? coreItems.map(item => ({ item, source: "coverage-core" })) : (summary.status === "fulfilled" ? (summary.value.plays || []).map(item => ({ item, source: "coverage-summary" })) : []);
+        const events = rawItems.map(({ item, source }, index) => normaliseEvent(item, index, source)).filter(event => event.type !== "other" && event.offset != null);
+        const types = new Set(events.map(event => event.type));
+        return { id: String(match.id), events: events.length, types: [...types] };
+      } catch { return { id: String(match.id), events: 0, types: [] }; }
+    }));
+    const matchesWithData = rows.filter(row => row.events > 0), has = type => rows.filter(row => row.types.includes(type)).length;
+    const sampleSize = rows.length, averageEvents = sampleSize ? Math.round(rows.reduce((sum, row) => sum + row.events, 0) / sampleSize) : 0;
+    const approved = sampleSize >= 3 && averageEvents >= 6 && has("corner") / sampleSize >= 2 / 3 && has("foul") / sampleSize >= 2 / 3 && has("card") / sampleSize >= 1 / 3;
+    return { league, approved, checkedAt: Date.now(), sampleSize, matchesWithData: matchesWithData.length, averageEvents, coverage: { corner: has("corner"), foul: has("foul"), card: has("card"), goal: has("goal"), substitution: has("substitution"), shot: has("shot") }, reason: approved ? "sufficient timestamped event coverage" : "insufficient repeatable in-play event coverage" };
+  } catch (error) { return { league, approved: false, checkedAt: Date.now(), sampleSize: 0, matchesWithData: 0, averageEvents: 0, coverage: {}, reason: error.message || "coverage check failed" }; }
+}
+
+async function pullFixtures() {
+  const dates = Array.from({ length: 8 }, (_, offset) => new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10));
+  const [coverageResults, fixtureResults] = await Promise.all([
+    Promise.all(SUPPORTED_LEAGUES.map(validateLeague)),
+    Promise.allSettled(SUPPORTED_LEAGUES.flatMap(league => dates.map(async date => {
+    const data = await readJson(`${ESPN_SITE}/${leaguePath(league)}/scoreboard?dates=${date.replaceAll("-", "")}`);
+    return (data.events || []).map(item => ({ ...fixture(item), league }));
+    })))
+  ]);
+  const coverage = Object.fromEntries(coverageResults.map(result => [result.league, result]));
+  const fixtures = fixtureResults.flatMap(result => result.status === "fulfilled" ? result.value : []).filter(f => (f.state === "in" || f.state === "pre") && coverage[f.league]?.approved);
+  return { provider: "ESPN", fetchedAt: Date.now(), fixtures, leagueCoverage: coverage };
+}
+async function refreshFixtureIndex(env) {
+  const id = env.FIXTURE_INDEX.idFromName("supported-fixtures");
+  return env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/refresh", { method: "POST" });
+}
+async function liveFixtures(env) {
+  const id = env.FIXTURE_INDEX.idFromName("supported-fixtures");
+  let response = await env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/fixtures");
+  if (response.status === 404) { await refreshFixtureIndex(env); response = await env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/fixtures"); }
+  const data = await response.json();
+  return json(data, response.status);
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.pathname === "/api/live-fixtures") return liveFixtures(env);
     if (url.pathname.startsWith("/api/espn/")) { const response = await espnApi(url); if (response) return response; }
+    if (url.pathname === "/api/room/fixture" && request.method === "POST") {
+      try {
+        const input = await request.json();
+        if (!input.fixture?.id) return json({ error: "fixture.id is required" }, 400);
+        const id = env.MATCH_ROOM.idFromName(`espn:${input.league || "eng.1"}:${input.fixture.id}`);
+        return env.MATCH_ROOM.get(id).fetch(new Request("https://room/create", { method: "POST", body: JSON.stringify({ ...input, mode: input.mode === "simulation" ? "simulation" : "live" }), headers: { "content-type": "application/json" } }));
+      } catch (error) { return json({ error: error.message || "Could not create fixture room" }, 400); }
+    }
     if (url.pathname === "/api/room" && request.method === "POST") { const id = env.MATCH_ROOM.newUniqueId(); return env.MATCH_ROOM.get(id).fetch(new Request("https://room/create", { method: "POST", body: await request.text(), headers: { "content-type": "application/json" } })); }
     if (url.pathname.startsWith("/api/room/")) { try { return env.MATCH_ROOM.get(env.MATCH_ROOM.idFromString(url.pathname.split("/").pop())).fetch(request); } catch { return new Response("Invalid room", { status: 400 }); } }
     if (url.pathname === "/play") { const target = new URL("/game.html", request.url); target.search = url.search; return env.ASSETS.fetch(new Request(target, request)); }
     if (url.pathname === "/test" || url.pathname === "/test/") return env.ASSETS.fetch(new Request(new URL("/test/index.html", request.url), request));
     return env.ASSETS.fetch(request);
-  }
+  },
+  scheduled(event, env, ctx) { ctx.waitUntil(refreshFixtureIndex(env)); }
 };
+export class FixtureIndex {
+  constructor(state) { this.state = state; }
+  async fetch(request) {
+    if (request.method === "POST" && new URL(request.url).pathname === "/refresh") {
+      try { const data = await pullFixtures(); await this.state.storage.put("index", data); return json({ ...data, refreshed: true }); }
+      catch (error) { return json({ error: error.message || "Could not refresh fixture index" }, 502); }
+    }
+    const data = await this.state.storage.get("index");
+    return data ? json(data) : json({ error: "Fixture index has not been refreshed yet" }, 404);
+  }
+}
 export class MatchRoom {
   constructor(state, env) { this.state = state; this.env = env; this.sockets = new Set(); this.room = null; }
   async fetch(request) {
@@ -139,6 +210,7 @@ export class MatchRoom {
           this.room.fixture = input.fixture;
           this.room.provider = { name: "ESPN", league: input.league || "eng.1", eventId: input.fixture.id, error: null };
           this.room.timeline = (input.events || []).filter(e => e && e.offset != null).map(e => ({ id: String(e.id), type: e.type, offset: Number(e.offset), minute: e.minute, text: e.text, team: e.team || null })); this.room.mode = input.mode === "simulation" ? "simulation" : "live"; this.room.speed = Math.max(1, Math.min(50, Number(input.speed) || 1)); this.room.preMatch = this.buildPreMatch();
+          this.room.session.status = this.room.fixture.state === "in" ? "lobby" : "lobby";
         }
       } catch {}
       await this.save(); return Response.json({ roomId: this.state.id.toString(), state: this.public() });
@@ -149,7 +221,7 @@ export class MatchRoom {
     this.room = await this.state.storage.get("room") || {
       createdAt: Date.now(), lastActivity: Date.now(), fixture: null, provider: { name: "ESPN", league: "eng.1", eventId: null, error: null },
       timeline: [], preMatch: [], mode: "live", speed: 1, session: { status: "lobby", startedAt: null, round: null, clock: 0, speed: 1 }, players: [], predictions: {}, leaderboard: [],
-      events: [{ label: "Room opened", detail: "Powered by ESPN" }]
+      events: [{ label: "Fixture room opened", detail: "Live data from ESPN" }], lastProviderEventIds: [], lastLivePollAt: 0
     };
   }
   async save() { this.room.lastActivity = Date.now(); await this.state.storage.put("room", this.room); await this.state.storage.setAlarm(Date.now() + 7200000); }
@@ -172,6 +244,43 @@ export class MatchRoom {
     const types = ["corner", "goal", "card"], minimumGap = clock > 0 ? 600 : 0;
     return this.room.timeline.find(e => e.offset >= clock + minimumGap && types.includes(e.type));
   }
+  async refreshLive() {
+    if (!this.room.fixture?.id || this.room.mode !== "live") return;
+    const league = this.room.provider?.league || "eng.1", id = this.room.provider.eventId;
+    try {
+      const data = await readJson(`${ESPN_SITE}/${leaguePath(league)}/summary?event=${encodeURIComponent(id)}`);
+      const competition = data.header?.competitions?.[0] || data.competitions?.[0] || {};
+      const nextFixture = fixture({ id, name: competition.shortName || competition.name, date: competition.date, competitions: [{ ...competition, competitors: competition.competitors || [] }], status: competition.status });
+      this.room.fixture = { ...this.room.fixture, ...nextFixture, home: { ...this.room.fixture.home, ...nextFixture.home }, away: { ...this.room.fixture.away, ...nextFixture.away } };
+      const incoming = (data.plays || []).map((p, i) => normaliseEvent(p, i, "live")).filter(e => e.offset != null && e.type !== "other");
+      const known = new Set(this.room.timeline.map(e => e.id));
+      for (const e of incoming) if (!known.has(e.id)) { this.room.timeline.push({ id: e.id, type: e.type, offset: e.offset, minute: e.minute, text: e.text, team: e.team || null }); this.room.events.unshift({ label: e.type === "goal" ? "GOAL" : "Match update", detail: e.text }); }
+      this.room.timeline.sort((a, b) => a.offset - b.offset);
+      this.room.lastProviderEventIds = this.room.timeline.map(e => e.id);
+      this.room.lastLivePollAt = Date.now();
+      if (this.room.session.status === "running") this.room.session.clock = this.liveClock(nextFixture, data);
+    } catch (error) { this.room.provider.error = error.message || "Live feed unavailable"; }
+  }
+  liveClock(fixtureData, summary) {
+    const status = fixtureData.status || {};
+    const detail = String(status.shortDetail || status.detail || "");
+    const clockText = String(summary?.header?.competitions?.[0]?.status?.displayClock || "").replace(/[^0-9.]/g, "");
+    const minute = Number(clockText);
+    if (Number.isFinite(minute) && minute > 0) return minute * 60;
+    const match = detail.match(/(\d+)\s*['’]/);
+    return match ? Number(match[1]) * 60 : this.room.session.clock || 0;
+  }
+  nextLiveType() {
+    const types = ["corner", "card", "goal", "foul"];
+    const previous = this.room.session.lastQuestionType;
+    return types.find(type => type !== previous) || "corner";
+  }
+  async openLiveRound() {
+    const type = this.nextLiveType(), f = this.room.fixture || {};
+    const round = { id: "round-" + (this.room.session.nextRoundIndex || 0), targetEventId: null, targetType: type, question: "Who gets the next " + type + "?", choices: [{ key: "home", label: f.home?.name || "Home" }, { key: "away", label: f.away?.name || "Away" }], status: "voting", warmupEndsAt: null, voteEndsAt: Date.now() + 10000, result: null, openedAt: Date.now(), baselineEventIds: this.room.timeline.map(e => e.id) };
+    this.room.session.lastQuestionType = type; this.room.session.round = round; this.room.session.nextRoundIndex = (this.room.session.nextRoundIndex || 0) + 1; this.room.session.nextQuestionAt = null;
+    this.room.events.unshift({ label: "Vote now", detail: round.question }); await this.save(); this.broadcast(); this.schedule(10000);
+  }
   targetForQuestion(q) { return this.room.timeline.find(e => (q.type === "first-goal-team" && e.type === "goal") || (q.type === "first-goal-kick-time" && e.type === "goal-kick") || (q.type === "first-foul-team" && e.type === "foul")); }
   keyForQuestion(q, target) {
     if (!target) return null;
@@ -188,8 +297,9 @@ export class MatchRoom {
     }
     if (changed) this.rebuildLeaderboard(); return changed;
   }
-  rebuildLeaderboard() { this.rebuildLeaderboard(); }
+  rebuildLeaderboard() { this.room.leaderboard = [...this.room.players].sort((a,b) => (b.points||0)-(a.points||0)).map((p,i) => ({ rank:i+1, name:p.name, points:p.points||0, rounds:p.rounds||0 })); }
   async startSession() {
+    if (this.room.mode === "live") { this.room.session = { status: "running", startedAt: Date.now(), round: null, clock: 0, nextRoundIndex: 0, mode: "live", speed: 1, lastQuestionType: null }; await this.save(); this.broadcast(); this.schedule(1000); return; }
     const first = this.nextTarget(0);
     if (!first) { this.room.session.status = "complete"; return; }
     this.room.session = { status: "running", startedAt: Date.now(), round: null, clock: 0, nextRoundIndex: 0, mode: this.room.mode || "live", speed: this.room.mode === "simulation" ? (this.room.speed || 1) : 1 };
@@ -204,7 +314,16 @@ export class MatchRoom {
     await this.save(); this.broadcast(); this.schedule(Math.max(250, round.warmupEndsAt - now));
   }
   async advance() {
-    const s = this.room.session, r = s.round; if (!r) return;
+    const s = this.room.session, r = s.round;
+    if (s.mode === "live") {
+      await this.refreshLive();
+      this.settlePreMatch(s.clock);
+      if (s.status === "running" && (!s.round || s.round.status === "settled") && this.room.fixture.state === "in" && Date.now() >= (s.nextQuestionAt || 0)) { await this.openLiveRound(); return; }
+      if (s.round?.status === "voting" && Date.now() >= s.round.voteEndsAt) { await this.settleLiveRound(s.round); return; }
+      if (s.status === "running" && this.room.fixture.state === "post") { s.status = "complete"; await this.save(); this.broadcast(); return; }
+      await this.save(); this.broadcast(); this.schedule(15000); return;
+    }
+    if (!r) return;
     const now = Date.now(), elapsed = s.holding ? s.clock : (now - s.startedAt) / 1000 * (s.speed || 1);
     s.clock = Math.max(0, elapsed); this.settlePreMatch(s.clock);
     if (r.status === "warmup" && now >= r.warmupEndsAt) { r.status = "voting"; r.voteEndsAt = now + (s.mode === "simulation" ? 10000 : (10000 / (s.speed || 1))); if (s.mode === "simulation") s.holding = true; this.room.events.unshift({ label: "Vote now", detail: r.question }); await this.save(); this.broadcast(); this.schedule(10000); return; }
@@ -225,14 +344,21 @@ export class MatchRoom {
     this.room.events.unshift({ label: correct ? "Prediction settled" : "Prediction settled", detail: round.result.event });
     await this.save(); this.broadcast(); this.schedule(1500);
   }
+  async settleLiveRound(round) {
+    const baseline = new Set(round.baselineEventIds || []), target = this.room.timeline.find(e => !baseline.has(e.id) && e.type === round.targetType);
+    const correct = target?.team && this.room.fixture ? (target.team === this.room.fixture.home.name ? "home" : target.team === this.room.fixture.away.name ? "away" : null) : null;
+    round.result = { correct, event: target?.text || `No ${round.targetType} recorded during the call` }; round.status = "settled";
+    for (const p of this.room.players) { const answer = this.room.predictions[p.id]?.[round.id]; if (correct && answer === correct) p.points = (p.points || 0) + 100; if (answer) p.rounds = (p.rounds || 0) + 1; }
+    this.rebuildLeaderboard(); this.room.session.nextQuestionAt = Date.now() + 120000; this.room.events.unshift({ label: "Prediction settled", detail: round.result.event }); await this.save(); this.broadcast(); this.schedule(15000);
+  }
   async webSocketMessage(ws, raw) {
     let m; try { m = JSON.parse(raw); } catch { return; } if (!this.room) await this.load(); this.room.lastActivity = Date.now();
-    if (m.type === "join") { let p = this.room.players.find(x => x.id === m.playerId); if (!p) { p = { id: crypto.randomUUID(), name: String(m.name || "Supporter").slice(0,20), points: 0, rounds: 0 }; this.room.players.push(p); } else if (m.name) p.name = String(m.name).slice(0,20); ws.send(JSON.stringify({ type:"identity", playerId:p.id })); }
+    if (m.type === "join") { let p = this.room.players.find(x => x.id === m.playerId); if (!p) { p = { id: crypto.randomUUID(), name: String(m.name || "Supporter").slice(0,20), points: 0, rounds: 0 }; this.room.players.push(p); } else if (m.name) p.name = String(m.name).slice(0,20); if (this.room.mode === "live" && this.room.session.status === "lobby") { this.room.session = { status: "running", startedAt: Date.now(), round: null, clock: 0, nextRoundIndex: 0, mode: "live", speed: 1, lastQuestionType: null }; } this.rebuildLeaderboard(); ws.send(JSON.stringify({ type:"identity", playerId:p.id })); }
     if (m.type === "prematch") { const p = this.room.players.find(x => x.id === m.playerId), q = (this.room.preMatch || []).find(x => x.id === m.questionId); if (p && q && !q.settled && ((q.input && Number.isInteger(Number(m.answer)) && Number(m.answer) >= q.input.min && Number(m.answer) <= q.input.max) || q.choices.some(c => c.key === m.answer))) { this.room.predictions[p.id] ||= {}; this.room.predictions[p.id].pre ||= {}; this.room.predictions[p.id].pre[q.id] = String(m.answer); } }
     if (m.type === "start") await this.startSession();
     if (m.type === "predict") { const p = this.room.players.find(x => x.id === m.playerId), r = this.room.session.round; if (p && r?.status === "voting" && Date.now() < r.voteEndsAt && r.id === m.roundId) { this.room.predictions[p.id] ||= {}; this.room.predictions[p.id][r.id] = m.answer; if (this.room.session.mode === "simulation") { r.status = "locked"; this.room.session.holding = false; this.room.session.startedAt = Date.now(); } } }
     await this.save(); this.broadcast();
-    if (m.type === "start" || m.type === "predict") this.schedule(500);
+    if (m.type === "start" || m.type === "predict" || m.type === "join") this.schedule(500);
   }
   async closeRoom(ws) { this.sockets.delete(ws); if (this.sockets.size === 0) { if (this.room) { await this.state.storage.delete("room"); this.room = null; } await this.state.storage.deleteAlarm(); } }
   async webSocketClose(ws) { await this.closeRoom(ws); }

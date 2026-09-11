@@ -1,33 +1,46 @@
-let ws,roomId,state,playerId,role;
-const app=document.querySelector("#app"),q=new URLSearchParams(location.search);
-const esc=v=>String(v??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-function connect(){ws=new WebSocket((location.protocol==="https:"?"wss":"ws")+"://"+location.host+"/api/room/"+roomId);ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.type==="identity"){playerId=m.playerId;localStorage.setItem("calledItPlayer:"+roomId,playerId)}if(m.state){state=m.state;render()}}}
-function send(m){if(ws?.readyState===1)ws.send(JSON.stringify(m))}
-function clock(s){s=Math.max(0,Math.floor(s||0));return String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0")}
-function preMatchCard(me){
- const questions=state.preMatch||[], answered=state.playerStatus?.[playerId]||[], current=questions.find(x=>!answered.includes(x.id)&&!x.settled);
- if(!current)return '<div class="pre-complete">Pre-match calls complete. Watch the match for the first live opportunity.</div>';
- const answerUi=current.input
-  ? '<label class="number-call">'+esc(current.input.suffix||"Minutes")+'<input id="preNumber" type="number" min="'+current.input.min+'" max="'+current.input.max+'" step="'+current.input.step+'" value="'+current.input.min+'"></label><button class="answer" data-pre-submit="'+esc(current.id)+'">Submit call</button>'
-  : '<div class="answers">'+current.choices.map(a=>'<button class="answer" data-pre="'+esc(a.key)+'">'+esc(a.label)+'</button>').join("")+'</div>';
- return '<div class="pre-modal-backdrop"><div class="pre-modal"><div class="phase">Pre-match call '+(answered.length+1)+' of '+questions.length+'</div><h2>'+esc(current.question)+'</h2><p class="muted">Make your call before kick-off.</p>'+answerUi+'</div></div>';
+let ws, roomId, state, playerId, role;
+const app = document.querySelector("#app"), query = new URLSearchParams(location.search);
+const esc = value => String(value ?? "").replace(/[&<>\"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'\"':"&quot;"}[c]));
+const clock = seconds => { const s = Math.max(0, Math.floor(seconds || 0)); return `${String(Math.floor(s / 60)).padStart(2,"0")}:${String(s % 60).padStart(2,"0")}`; };
+const send = message => { if (ws?.readyState === 1) ws.send(JSON.stringify(message)); };
+
+async function getFixtures() {
+  const response = await fetch(`/api/live-fixtures?league=${encodeURIComponent(query.get("league") || "eng.1")}`);
+  const data = await response.json(); if (!response.ok) throw Error(data.error || "Fixtures unavailable"); return data;
 }
-function render(){
- if(!state)return;
- const f=state.fixture||{home:{name:"Home"},away:{name:"Away"}},r=state.session?.round,me=(state.players||[]).find(p=>p.id===playerId),hasFixture=Boolean(state.fixture?.id);
- const now=Date.now(),remaining=r?.status==="warmup"?Math.max(0,Math.ceil((r.warmupEndsAt-now)/1000)):r?.status==="voting"?Math.max(0,Math.ceil((r.voteEndsAt-now)/1000)):0,answers=r?.choices||[];
- app.innerHTML='<header class="brand">CALLED IT <span class="room">'+esc(state.session?.status||"LOBBY")+'</span></header>'+
- '<div class="eyebrow">LIVE PREDICTION ROOM · ESPN</div><h1>'+esc(f.home?.name)+' <i>'+(f.home?.score??"–")+' — '+(f.away?.score??"–")+'</i> '+esc(f.away?.name)+'</h1>'+
- '<p class="muted">'+(hasFixture?"ESPN event "+esc(state.provider?.eventId||"")+" · match clock "+clock(state.session?.clock):"Waiting for a fixture")+'</p>'+
- (state.session?.status==="lobby"?(hasFixture?'<section class="card"><h2>Join this room</h2>'+(me?'<p class="joined">Joined as <b>'+esc(me.name)+'</b></p>':'<input id="name" placeholder="Your name" maxlength="20"><button id="join">Join match</button>')+'<p class="muted">'+(state.players?.length||0)+' player(s) in this room.</p>'+(me?preMatchCard(me):'')+(role==="host"?' <button class="secondary" id="start">Start match</button>':'')+'</section>':'<section class="card"><h2>No match selected</h2><p class="muted">Choose a fixture from the ESPN harness before opening a prediction room.</p><a class="button" href="/test/">Choose a match ↗</a></section>'):
- '<section class="card live-card '+(r?.status==="voting"?"hot":"")+'"><div class="phase">'+esc(r?.status||"LIVE")+'</div><h2>'+esc(r?.question||"Watching the match")+'</h2><p class="countdown">'+(r?.status==="warmup"?"Get ready · "+remaining+"s":r?.status==="voting"?"CALL NOW · "+remaining+"s":r?.status==="settled"?"Settled":"Waiting")+'</p><div class="answers">'+answers.map(a=>'<button class="answer" data-answer="'+esc(a.key)+'">'+esc(a.label)+'</button>').join("")+'</div>'+(r?.result?'<p class="result"><b>Result:</b> '+esc(r.result.event)+' · correct call: '+esc(r.result.correct||"unavailable")+'</p>':'')+'</section>')+
- '<section class="card"><h2>Leaderboard</h2><div class="leaders">'+((state.leaderboard||[]).map(p=>'<div><b>#'+p.rank+' '+esc(p.name)+'</b><span>'+p.points+' pts · '+p.rounds+' calls</span></div>').join("")||'<p class="muted">Players appear here after joining.</p>')+'</div></section>'+
- '<section class="card"><h2>Room activity</h2>'+(state.events||[]).slice(0,5).map(e=>'<div class="event"><b>'+esc(e.label)+'</b><br><span class="muted">'+esc(e.detail)+'</span></div>').join("")+'</section>';
- const join=document.querySelector("#join");if(join)join.onclick=()=>{const name=document.querySelector("#name").value||"Supporter";send({type:"join",name,playerId});join.disabled=true};
- const start=document.querySelector("#start");if(start)start.onclick=()=>send({type:"start"});
- document.querySelectorAll("[data-pre]").forEach(b=>b.onclick=()=>{const question=(state.preMatch||[]).find(x=>x.choices.some(a=>a.key===b.dataset.pre)&&!(state.playerStatus?.[playerId]||[]).includes(x.id));send({type:"prematch",playerId,questionId:question?.id,answer:b.dataset.pre})}); document.querySelectorAll("[data-pre-submit]").forEach(b=>b.onclick=()=>{const input=document.querySelector("#preNumber");send({type:"prematch",playerId,questionId:b.dataset.preSubmit,answer:input?.value})});
- document.querySelectorAll("[data-answer]").forEach(b=>b.onclick=()=>send({type:"predict",playerId,roundId:r?.id,answer:b.dataset.answer}));
- if(r?.status==="warmup"||r?.status==="voting")setTimeout(render,1000);
+function fixtureCard(f) {
+  const live = f.state === "in";
+  return `<button class="fixture-choice" data-fixture="${esc(f.id)}" data-league="${esc(f.league || "eng.1")}"><span class="fixture-teams"><strong>${esc(f.home.name)}</strong><b>${f.home.score ?? "–"} — ${f.away.score ?? "–"}</b><strong>${esc(f.away.name)}</strong></span><small class="fixture-status ${live ? "live" : ""}">${esc(live ? "LIVE NOW" : f.status)} · ${esc(f.league || "")} ${f.venue ? ` · ${esc(f.venue)}` : ""}</small></button>`;
 }
-async function boot(){roomId=q.get("room");role=q.get("role")||"player";if(!roomId){location.replace("/test/");return}playerId=localStorage.getItem("calledItPlayer:"+roomId);connect()}
-boot();
+async function bootLanding() {
+  app.innerHTML = '<header class="brand">CALLED IT <span class="room">LIVE MATCHDAY</span></header><div class="eyebrow">THE MATCHDAY EDITION</div><h1>Pick a fixture.<br><i>Call it live.</i></h1><p class="muted">Choose a supported fixture, join before kick-off and make your calls while the match unfolds.</p><section class="card"><div class="section-head"><h2>Fixtures</h2><button class="refresh" id="refresh">Refresh</button></div><div id="fixtures"><p class="muted">Loading this week’s fixtures…</p></div></section><p class="fine-print">No host. No private room to create. The fixture is the room.</p>';
+  async function load() { const target = document.querySelector("#fixtures"); target.innerHTML = '<p class="muted">Checking the fixture list…</p>'; try { const data = await getFixtures(); const available = (data.fixtures || []).filter(f => f.state === "in" || f.state === "pre"); target.innerHTML = available.length ? available.map(fixtureCard).join("") : '<p class="muted">There are no supported fixtures live or scheduled today.</p>'; document.querySelectorAll("[data-fixture]").forEach(button => button.onclick = () => joinFixture(data.fixtures.find(f => f.id === button.dataset.fixture), button.dataset.league)); } catch (error) { target.innerHTML = `<p class="error">${esc(error.message)}</p>`; } }
+  document.querySelector("#refresh").onclick = load; await load();
+}
+async function joinFixture(fixture, league) {
+  if (!fixture) return;
+  const button = document.querySelector(`[data-fixture="${CSS.escape(fixture.id)}"]`); if (button) button.disabled = true;
+  try { const response = await fetch("/api/room/fixture", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({ fixture, league, mode:"live" }) }); const data = await response.json(); if (!response.ok) throw Error(data.error || "Could not open fixture"); location.href = `/play?room=${encodeURIComponent(data.roomId)}`; } catch (error) { if (button) button.disabled = false; alert(error.message); }
+}
+function connect() { ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/room/${roomId}`); ws.onmessage = event => { const message = JSON.parse(event.data); if (message.type === "identity") { playerId = message.playerId; localStorage.setItem(`calledItPlayer:${roomId}`, playerId); } if (message.state) { state = message.state; render(); } }; ws.onclose = () => setTimeout(connect, 1500); }
+function preMatchCard(me) {
+  const questions = state.preMatch || [], answered = state.playerStatus?.[playerId] || [], current = questions.find(q => !answered.includes(q.id) && !q.settled);
+  if (!current) return '<div class="pre-complete">Your three calls are in. Stay with the match — the next live question will appear here.</div>';
+  const answerUi = current.input ? `<label class="number-call">${esc(current.input.suffix)}<input id="preNumber" type="number" min="${current.input.min}" max="${current.input.max}" step="${current.input.step}" value="${current.input.min}"></label><button class="answer" data-pre-submit="${esc(current.id)}">Submit call</button>` : `<div class="answers">${current.choices.map(a => `<button class="answer" data-pre="${esc(a.key)}">${esc(a.label)}</button>`).join("")}</div>`;
+  return `<div class="pre-modal-backdrop"><div class="pre-modal"><div class="phase">Your pre-match calls · ${answered.length + 1} of ${questions.length}</div><h2>${esc(current.question)}</h2><p class="muted">Make your call before kick-off.</p>${answerUi}</div></div>`;
+}
+function render() {
+  if (!state) return;
+  const f = state.fixture || { home:{name:"Home"}, away:{name:"Away"} }, r = state.session?.round, me = (state.players || []).find(p => p.id === playerId), answered = state.playerStatus?.[playerId] || [], incomplete = (state.preMatch || []).some(q => !answered.includes(q.id) && !q.settled);
+  const now = Date.now(), remaining = r?.status === "voting" ? Math.max(0, Math.ceil((r.voteEndsAt - now) / 1000)) : 0;
+  const join = !me ? `<input id="name" placeholder="Your name" maxlength="20"><button id="join">Join match</button>` : `<p class="joined">Joined as <b>${esc(me.name)}</b></p>`;
+  const live = r && r.status !== "settled" ? `<section class="card live-card ${r.status === "voting" ? "hot" : ""}"><div class="phase">${r.status === "voting" ? "CALL NOW" : "Next up"}</div><h2>${esc(r.question)}</h2>${r.status === "voting" ? `<p class="countdown">${remaining}s remaining</p><div class="answers">${(r.choices || []).map(a => `<button class="answer" data-answer="${esc(a.key)}">${esc(a.label)}</button>`).join("")}</div>` : '<p class="muted">Watch the match. Your next call will appear shortly.</p>'}</section>` : r?.status === "settled" ? `<section class="card"><div class="phase">Call settled</div><h2>${esc(r.result?.event || "The moment has landed")}</h2><p class="muted">The next question will arrive when the match gives us one.</p></section>` : '<section class="card"><p class="muted">Waiting for the next live question…</p></section>';
+  app.innerHTML = `<header class="brand">CALLED IT <span class="room">${esc(state.session?.status || "LIVE")}</span></header><div class="eyebrow">LIVE MATCH · ESPN</div><h1>${esc(f.home?.name)} <i>${f.home?.score ?? "–"} — ${f.away?.score ?? "–"}</i> ${esc(f.away?.name)}</h1><p class="muted">${esc(state.fixture?.status || "Fixture room")} · match clock ${clock(state.session?.clock)}</p>${state.session?.status === "lobby" ? `<section class="card"><h2>Join this match</h2>${join}<p class="muted">${state.players?.length || 0} supporter(s) are in the room.</p></section>` : ""}${me && incomplete ? preMatchCard(me) : ""}${me && !incomplete ? live : ""}<section class="card"><div class="section-head"><h2>Leaderboard</h2><span class="muted">This fixture</span></div><div class="leaders">${(state.leaderboard || []).map(p => `<div><b>#${p.rank} ${esc(p.name)}</b><span>${p.points} pts · ${p.rounds} calls</span></div>`).join("") || '<p class="muted">Join to appear here.</p>'}</div></section><section class="card"><h2>Match feed</h2>${(state.events || []).slice(0,5).map(e => `<div class="event"><b>${esc(e.label)}</b><br><span class="muted">${esc(e.detail)}</span></div>`).join("")}</section>`;
+  const joinButton = document.querySelector("#join"); if (joinButton) joinButton.onclick = () => { const name = document.querySelector("#name").value || "Supporter"; joinButton.disabled = true; send({type:"join", name, playerId}); };
+  document.querySelectorAll("[data-pre]").forEach(button => button.onclick = () => { const q = (state.preMatch || []).find(item => item.choices.some(a => a.key === button.dataset.pre) && !(state.playerStatus?.[playerId] || []).includes(item.id)); send({type:"prematch", playerId, questionId:q?.id, answer:button.dataset.pre}); });
+  document.querySelectorAll("[data-pre-submit]").forEach(button => button.onclick = () => send({type:"prematch", playerId, questionId:button.dataset.preSubmit, answer:document.querySelector("#preNumber")?.value}));
+  document.querySelectorAll("[data-answer]").forEach(button => button.onclick = () => { button.disabled = true; send({type:"predict", playerId, roundId:r?.id, answer:button.dataset.answer}); });
+  if (r?.status === "voting") setTimeout(render, 1000);
+}
+roomId = query.get("room"); role = query.get("role") || "player";
+if (roomId) { playerId = localStorage.getItem(`calledItPlayer:${roomId}`); connect(); } else bootLanding();

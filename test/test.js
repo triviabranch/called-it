@@ -45,6 +45,7 @@ async function selectFixture(id) {
 function renderMatch() {
   const f = state.match.fixture || state.fixture; const events = state.match.events || [];
   $("#matchTitle").textContent = `${f.home.name} v ${f.away.name}`; $("#matchMeta").textContent = `${formatDate(f.date || state.date)} · ${state.league} · ${events.length} timestamped updates`;
+  const sources = state.match.sources || {}; $("#provenance").innerHTML = `<b>PROCESSING PROVENANCE</b><span>ESPN site summary: ${escapeHtml(sources.summary || "not read")}</span><span>ESPN core plays: ${escapeHtml(sources.plays || "not read")}</span><span>Situation: ${sources.situation ? "read" : "unavailable"}</span><span>Normalised events: ${events.length}</span>`;
   $("#homeName").textContent = f.home.name; $("#awayName").textContent = f.away.name; $("#homeScore").textContent = f.home.score ?? "–"; $("#awayScore").textContent = f.away.score ?? "–";
   resetReplay();
   const createRoom = $("#createRoom");
@@ -71,7 +72,7 @@ function appendPrinterEvent(event) {
   if (empty) empty.remove();
   const row = document.createElement("div"); row.className = "print-line";
   const time = document.createElement("span"); time.className = "time"; time.textContent = formatOffset(event.offset);
-  const tag = document.createElement("span"); tag.className = "tag"; tag.textContent = event.type;
+  const tag = document.createElement("span"); tag.className = "tag"; tag.textContent = `${event.source || "normalised"} · ${event.type}`;
   const detail = document.createElement("span"); detail.className = "detail"; detail.textContent = cleanSummary(event) + (event.team ? " · " + event.team : "");
   row.append(time, tag, detail); $("#printer").appendChild(row);
 }

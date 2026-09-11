@@ -10,6 +10,17 @@ binding = "ASSETS"
 name = "MATCH_ROOM"
 class_name = "MatchRoom"
 
+[[durable_objects.bindings]]
+name = "FIXTURE_INDEX"
+class_name = "FixtureIndex"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["MatchRoom"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["FixtureIndex"]
+
+[triggers]
+crons = ["17 3 * * *"]
