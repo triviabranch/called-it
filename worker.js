@@ -207,7 +207,7 @@ export class MatchRoom {
     const s = this.room.session, r = s.round; if (!r) return;
     const now = Date.now(), elapsed = (now - s.startedAt) / 1000 * (s.speed || 1);
     s.clock = Math.max(0, elapsed); this.settlePreMatch(s.clock);
-    if (r.status === "warmup" && now >= r.warmupEndsAt) { r.status = "voting"; r.voteEndsAt = now + 10000; this.room.events.unshift({ label: "Vote now", detail: r.question }); await this.save(); this.broadcast(); this.schedule(10000); return; }
+    if (r.status === "warmup" && now >= r.warmupEndsAt) { r.status = "voting"; r.voteEndsAt = now + (10000 / (s.speed || 1)); this.room.events.unshift({ label: "Vote now", detail: r.question }); await this.save(); this.broadcast(); this.schedule(10000); return; }
     if (r.status === "voting" && now >= r.voteEndsAt) { r.status = "locked"; await this.settleRound(r); return; }
     if (r.status === "locked" || r.status === "settled") { const next = this.nextTarget(s.clock); if (next) { s.nextRoundIndex = (s.nextRoundIndex || 0) + 1; await this.openRound(next, s.nextRoundIndex); } else { s.status = "complete"; await this.save(); this.broadcast(); } return; }
     this.schedule(r.status === "warmup" ? r.warmupEndsAt - now : r.voteEndsAt - now);
