@@ -1,6 +1,7 @@
 const ESPN_SITE = "https://site.web.api.espn.com/apis/site/v2/sports/soccer";
 const ESPN_CORE = "https://sports.core.api.espn.com/v2/sports/soccer/leagues";
 const SUPPORTED_LEAGUES = ["eng.1", "eng.2", "sco.1", "esp.1", "ger.1", "ita.1", "fra.1", "usa.1", "aus.1"];
+const LEAGUE_HIERARCHY = Object.fromEntries(SUPPORTED_LEAGUES.map((league, index) => [league, index]));
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "access-control-allow-origin": "*" } });
@@ -136,7 +137,12 @@ async function pullFixtures() {
   const programmes = await Promise.allSettled(SUPPORTED_LEAGUES.map(async league => ({ league, events: (await readJson(`${ESPN_SITE}/${leaguePath(league)}/scoreboard?dates=${start}-${end}`)).events || [] })));
   const coverageResults = await Promise.all(programmes.map(result => result.status === "fulfilled" ? validateLeague(result.value.league, result.value.events) : ({ league: "unknown", approved: false, checkedAt: Date.now(), sampleSize: 0, matchesWithData: 0, averageEvents: 0, coverage: {}, reason: result.reason?.message || "programme pull failed" })));
   const coverage = Object.fromEntries(coverageResults.map(result => [result.league, result]));
-  const fixtures = programmes.flatMap(result => result.status === "fulfilled" ? result.value.events.map(item => ({ ...fixture(item), league: result.value.league })) : []).filter(f => (f.state === "in" || f.state === "pre") && coverage[f.league]?.approved);
+  const fixtures = programmes.flatMap(result => result.status === "fulfilled" ? result.value.events.map(item => ({ ...fixture(item), league: result.value.league })) : []).filter(f => (f.state === "in" || f.state === "pre") && coverage[f.league]?.approved).sort((a, b) => {
+    const byKickoff = new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime();
+    if (byKickoff) return byKickoff;
+    const byCompetition = (LEAGUE_HIERARCHY[a.league] ?? 999) - (LEAGUE_HIERARCHY[b.league] ?? 999);
+    return byCompetition || a.name.localeCompare(b.name);
+  });
   return { provider: "ESPN", fetchedAt: Date.now(), fixtures, leagueCoverage: coverage };
 }
 async function refreshFixtureIndex(env) {
