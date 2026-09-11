@@ -134,12 +134,19 @@ async function validateLeague(league, programme) {
   } catch (error) { return { league, approved: false, checkedAt: Date.now(), sampleSize: 0, matchesWithData: 0, averageEvents: 0, coverage: {}, reason: error.message || "coverage check failed" }; }
 }
 
+function inUkSaturdayClosedPeriod(value) {
+  if (!value) return false;
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date(value)).filter(part => part.type !== "literal").map(part => [part.type, part.value]));
+  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
+  return parts.weekday === "Sat" && minutes >= 14 * 60 + 45 && minutes < 17 * 60 + 15;
+}
+
 async function pullFixtures() {
   const start = new Date(Date.now() - 21 * 86400000).toISOString().slice(0, 10).replaceAll("-", ""), end = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10).replaceAll("-", "");
   const programmes = await Promise.allSettled(SUPPORTED_LEAGUES.map(async league => ({ league, events: (await readJson(`${ESPN_SITE}/${leaguePath(league)}/scoreboard?dates=${start}-${end}`)).events || [] })));
   const coverageResults = await Promise.all(programmes.map(result => result.status === "fulfilled" ? validateLeague(result.value.league, result.value.events) : ({ league: "unknown", approved: false, checkedAt: Date.now(), sampleSize: 0, matchesWithData: 0, averageEvents: 0, coverage: {}, reason: result.reason?.message || "programme pull failed" })));
   const coverage = Object.fromEntries(coverageResults.map(result => [result.league, result]));
-  const fixtures = programmes.flatMap(result => result.status === "fulfilled" ? result.value.events.map(item => ({ ...fixture(item), league: result.value.league, competition: LEAGUE_NAMES[result.value.league] || result.value.league })) : []).filter(f => (f.state === "in" || f.state === "pre") && coverage[f.league]?.approved).sort((a, b) => {
+  const fixtures = programmes.flatMap(result => result.status === "fulfilled" ? result.value.events.map(item => ({ ...fixture(item), league: result.value.league, competition: LEAGUE_NAMES[result.value.league] || result.value.league })) : []).filter(f => (f.state === "in" || f.state === "pre") && coverage[f.league]?.approved && !inUkSaturdayClosedPeriod(f.date)).sort((a, b) => {
     const byKickoff = new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime();
     if (byKickoff) return byKickoff;
     const byCompetition = (LEAGUE_HIERARCHY[a.league] ?? 999) - (LEAGUE_HIERARCHY[b.league] ?? 999);
