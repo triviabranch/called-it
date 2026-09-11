@@ -260,7 +260,7 @@ export class MatchRoom {
   async load() {
     this.room = await this.state.storage.get("room") || {
       createdAt: Date.now(), lastActivity: Date.now(), fixture: null, provider: { name: "ESPN", league: "eng.1", eventId: null, error: null },
-      timeline: [], preMatch: [], mode: "live", speed: 1, session: { status: "lobby", startedAt: null, round: null, clock: 0, speed: 1 }, players: [], predictions: {}, leaderboard: [],
+      timeline: [], preMatch: [], mode: "live", speed: 1, session: { status: "lobby", startedAt: null, round: null, clock: 0, clockBase: 0, speed: 1 }, players: [], predictions: {}, leaderboard: [],
       events: [{ label: "Fixture room opened", detail: "Live data from ESPN" }], lastProviderEventIds: [], lastLivePollAt: 0
     };
   }
@@ -361,7 +361,7 @@ export class MatchRoom {
     if (this.room.mode === "live") { this.room.session = { status: "running", startedAt: Date.now(), round: null, clock: 0, nextRoundIndex: 0, mode: "live", speed: 1, lastQuestionType: null }; await this.save(); this.broadcast(); this.schedule(1000); return; }
     const first = this.nextTarget(0);
     if (!first) { this.room.session.status = "complete"; return; }
-    this.room.session = { status: "running", startedAt: Date.now(), round: null, clock: 0, nextRoundIndex: 0, mode: this.room.mode || "live", speed: this.room.mode === "simulation" ? (this.room.speed || 1) : 1 };
+    this.room.session = { status: "running", startedAt: Date.now(), round: null, clock: 0, clockBase: 0, nextRoundIndex: 0, mode: this.room.mode || "live", speed: this.room.mode === "simulation" ? (this.room.speed || 1) : 1 };
     await this.openRound(first, 0);
   }
   async openRound(target, index) {
@@ -383,10 +383,10 @@ export class MatchRoom {
       await this.save(); this.broadcast(); this.schedule(15000); return;
     }
     if (!r) return;
-    const now = Date.now(), elapsed = s.holding ? s.clock : (now - s.startedAt) / 1000 * (s.speed || 1);
+    const now = Date.now(), elapsed = s.holding ? s.clock : (s.clockBase || 0) + (now - s.startedAt) / 1000 * (s.speed || 1);
     s.clock = Math.max(0, elapsed); this.settlePreMatch(s.clock);
     if (r.status === "warmup" && now >= r.warmupEndsAt) { r.status = "voting"; r.voteEndsAt = now + (s.mode === "simulation" ? 10000 : (10000 / (s.speed || 1))); if (s.mode === "simulation") s.holding = true; this.room.events.unshift({ label: "Vote now", detail: r.question }); await this.save(); this.broadcast(); this.schedule(10000); return; }
-    if (r.status === "voting" && now >= r.voteEndsAt) { r.status = "locked"; if (s.mode === "simulation") { s.holding = false; s.startedAt = now; } await this.save(); this.broadcast(); this.schedule(Math.max(250, ((this.room.timeline.find(e => e.id === r.targetEventId)?.offset || s.clock) - s.clock) * 1000 / (s.speed || 1))); return; }
+    if (r.status === "voting" && now >= r.voteEndsAt) { r.status = "locked"; if (s.mode === "simulation") { s.holding = false; s.clockBase = s.clock; s.startedAt = now; } await this.save(); this.broadcast(); this.schedule(Math.max(250, ((this.room.timeline.find(e => e.id === r.targetEventId)?.offset || s.clock) - s.clock) * 1000 / (s.speed || 1))); return; }
     if (r.status === "locked") { const target = this.room.timeline.find(e => e.id === r.targetEventId); if (target && s.clock < target.offset) { this.schedule(Math.max(250, (target.offset - s.clock) * 1000 / (s.speed || 1))); return; } await this.settleRound(r); return; }
     if (r.status === "settled") { const next = this.nextTarget(s.clock); if (next) { s.nextRoundIndex = (s.nextRoundIndex || 0) + 1; await this.openRound(next, s.nextRoundIndex); } else { s.status = "complete"; await this.save(); this.broadcast(); } return; }
     this.schedule(r.status === "warmup" ? r.warmupEndsAt - now : r.voteEndsAt - now);
@@ -415,7 +415,7 @@ export class MatchRoom {
     if (m.type === "join") { let p = this.room.players.find(x => x.id === m.playerId); if (!p) { p = { id: crypto.randomUUID(), name: String(m.name || "Supporter").slice(0,20), points: 0, rounds: 0 }; this.room.players.push(p); } else if (m.name) p.name = String(m.name).slice(0,20); if (this.room.mode === "live" && this.room.session.status === "lobby") { this.room.session = { status: "running", startedAt: Date.now(), round: null, clock: 0, nextRoundIndex: 0, mode: "live", speed: 1, lastQuestionType: null }; } this.rebuildLeaderboard(); ws.send(JSON.stringify({ type:"identity", playerId:p.id })); }
     if (m.type === "prematch") { const p = this.room.players.find(x => x.id === m.playerId), q = (this.room.preMatch || []).find(x => x.id === m.questionId); if (p && q && !q.settled && ((q.input && Number.isInteger(Number(m.answer)) && Number(m.answer) >= q.input.min && Number(m.answer) <= q.input.max) || q.choices.some(c => c.key === m.answer))) { this.room.predictions[p.id] ||= {}; this.room.predictions[p.id].pre ||= {}; this.room.predictions[p.id].pre[q.id] = String(m.answer); } }
     if (m.type === "start") await this.startSession();
-    if (m.type === "predict") { const p = this.room.players.find(x => x.id === m.playerId), r = this.room.session.round; if (p && r?.status === "voting" && Date.now() < r.voteEndsAt && r.id === m.roundId) { this.room.predictions[p.id] ||= {}; this.room.predictions[p.id][r.id] = m.answer; if (this.room.session.mode === "simulation") { r.status = "locked"; this.room.session.holding = false; this.room.session.startedAt = Date.now(); } } }
+    if (m.type === "predict") { const p = this.room.players.find(x => x.id === m.playerId), r = this.room.session.round; if (p && r?.status === "voting" && Date.now() < r.voteEndsAt && r.id === m.roundId) { this.room.predictions[p.id] ||= {}; this.room.predictions[p.id][r.id] = m.answer; if (this.room.session.mode === "simulation") { r.status = "locked"; this.room.session.holding = false; this.room.session.clockBase = this.room.session.clock; this.room.session.startedAt = Date.now(); } } }
     await this.save(); this.broadcast();
     if (m.type === "start" || m.type === "predict" || m.type === "join") this.schedule(500);
   }

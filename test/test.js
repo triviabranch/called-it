@@ -60,8 +60,10 @@ function renderMatch() {
 }
 function resetReplay() { state.started=false; state.paused=false; state.released=new Set(); state.elapsedBeforePause=0; if(state.timer) cancelAnimationFrame(state.timer); $("#matchClock").textContent="00:00"; $("#cueStatus").textContent="Ready for kick-off cue"; $("#pause").disabled=true; $("#pause").textContent="Pause"; $("#printerCount").textContent="0 RELEASED"; $("#printer").innerHTML='<div class="empty">Form the kick-off cue to begin the replay.</div>'; }
 function cleanSummary(event) { return String(event.text || "Match update").replace(/\s+/g, " ").trim(); }
+function eventKey(event) { return String(event.id ?? `${event.type}-${event.offset}-${event.text}`); }
+function matchesFilter(event) { return state.filter === "all" || event.type === state.filter; }
 function renderPrinter() {
-  const events = (state.match?.events || []).filter(e => state.filter === "all" || e.type === state.filter);
+  const events = (state.match?.events || []).filter(matchesFilter);
   const visible = events.filter(e => state.released.has(e.id));
   $("#printerCount").textContent = `${visible.length} RELEASED`;
   $("#printer").innerHTML = visible.length ? visible.map(e => `<div class="print-line"><span class="time">${formatOffset(e.offset)}</span><span class="tag">${escapeHtml(e.type)}</span><span class="detail">${escapeHtml(cleanSummary(e))}${e.team ? ` <strong>· ${escapeHtml(e.team)}</strong>` : ""}</span></div>`).join("") : '<div class="empty">No updates match this filter yet.</div>';
@@ -78,11 +80,11 @@ function appendPrinterEvent(event) {
 }
 function releaseEvents(elapsed) {
   const events = state.match?.events || [];
-  const newlyReleased = events.filter(e => e.offset != null && e.offset <= elapsed && !state.released.has(e.id));
-  newlyReleased.forEach(e => state.released.add(e.id));
+  const newlyReleased = events.filter(e => e.offset != null && e.offset <= elapsed && !state.released.has(eventKey(e)));
+  newlyReleased.forEach(e => state.released.add(eventKey(e)));
   if (!newlyReleased.length) return;
   if (state.filter === "all") newlyReleased.forEach(appendPrinterEvent); else renderPrinter();
-  const visibleCount = events.filter(e => state.released.has(e.id) && (state.filter === "all" || e.type === state.filter)).length;
+  const visibleCount = events.filter(e => state.released.has(eventKey(e)) && matchesFilter(e)).length;
   $("#printerCount").textContent = visibleCount + " RELEASED";
   $("#printer").scrollTop = $("#printer").scrollHeight;
 }
@@ -92,12 +94,12 @@ function tick(now) {
   $("#matchClock").textContent = formatClock(elapsed);
   const events = state.match.events || [];
   releaseEvents(elapsed);
-  if (events.some(e => e.offset != null && !state.released.has(e.id))) state.timer = requestAnimationFrame(tick);
+  if (events.some(e => e.offset != null && !state.released.has(eventKey(e)))) state.timer = requestAnimationFrame(tick);
   else { state.paused=true; $("#pause").disabled=true; $("#cueStatus").textContent="Replay complete"; }
 }
 $("#kickoff").onclick = () => { state.started=true; state.paused=false; state.elapsedBeforePause=0; state.startedAt=performance.now(); $("#kickoff").disabled=true; $("#pause").disabled=false; $("#cueStatus").textContent=`Kick-off cue formed · ${state.speed}×`; state.timer=requestAnimationFrame(tick); };
 $("#pause").onclick = () => { if(!state.started)return; if(!state.paused){ state.elapsedBeforePause=(performance.now()-state.startedAt)/1000*state.speed+state.elapsedBeforePause; state.paused=true; $("#pause").textContent="Resume"; $("#cueStatus").textContent="Replay paused"; } else { state.paused=false; state.startedAt=performance.now(); $("#pause").textContent="Pause"; $("#cueStatus").textContent=`Replay running · ${state.speed}×`; state.timer=requestAnimationFrame(tick); } };
 $("#reset").onclick = resetReplay;
 $("#changeMatch").onclick = () => { $("#playback").classList.add("hidden"); $("#intro").classList.remove("hidden"); openSetup(); };
-$("[data-speed]").forEach(b => b.onclick = () => { const nextSpeed=Number(b.dataset.speed); const previousSpeed=state.speed; if(state.started&&!state.paused){ state.elapsedBeforePause=(performance.now()-state.startedAt)/1000*previousSpeed+state.elapsedBeforePause; state.startedAt=performance.now(); } state.speed=nextSpeed; $(".speed-row button").forEach(x=>x.classList.toggle("selected",x===b)); $("#cueStatus").textContent = state.started ? `Replay running · ${state.speed}×` : `Ready for kick-off cue · ${state.speed}×`; });
-$$("[data-filter]").forEach(b => b.onclick = () => { state.filter=b.dataset.filter; $$(".filter-row button").forEach(x=>x.classList.toggle("selected",x===b)); renderPrinter(); });
+$$(`[data-speed]`).forEach(b => b.onclick = () => { const nextSpeed=Number(b.dataset.speed); const previousSpeed=state.speed; if(state.started&&!state.paused){ state.elapsedBeforePause=(performance.now()-state.startedAt)/1000*previousSpeed+state.elapsedBeforePause; state.startedAt=performance.now(); } state.speed=nextSpeed; $$(`[data-speed]`).forEach(x=>x.classList.toggle("selected",x===b)); $("#cueStatus").textContent = state.started ? `Replay running · ${state.speed}×` : `Ready for kick-off cue · ${state.speed}×`; });
+$$(`[data-filter]`).forEach(b => b.onclick = () => { state.filter=b.dataset.filter; $$(`[data-filter]`).forEach(x=>x.classList.toggle("selected",x===b)); renderPrinter(); });
