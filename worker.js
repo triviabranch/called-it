@@ -15,10 +15,16 @@ const SUPPORTED_COMPETITIONS = [
 const SUPPORTED_LEAGUES = SUPPORTED_COMPETITIONS.map(item => item.league);
 const LEAGUE_HIERARCHY = Object.fromEntries(SUPPORTED_COMPETITIONS.map(item => [item.league, item.order]));
 const LEAGUE_NAMES = Object.fromEntries(SUPPORTED_COMPETITIONS.map(item => [item.league, item.name]));
+const COMPETITION_KEYS = SUPPORTED_COMPETITIONS.map(item => `${item.sport}:${item.league}`);
+const DEFAULT_ENABLED_COMPETITIONS = SUPPORTED_COMPETITIONS.filter(item => item.sport === "soccer").map(item => `${item.sport}:${item.league}`);
 function competitionConfig(sport, league) {
   return SUPPORTED_COMPETITIONS.find(item => item.sport === sport && item.league === league)
     || SUPPORTED_COMPETITIONS.find(item => item.league === league)
     || SUPPORTED_COMPETITIONS[0];
+}
+function normaliseEnabledCompetitions(values) {
+  const selected = Array.isArray(values) ? values : DEFAULT_ENABLED_COMPETITIONS;
+  return [...new Set(selected)].filter(key => COMPETITION_KEYS.includes(key));
 }
 function siteBase(sport) { return `${ESPN_SITE_ROOT}/${encodeURIComponent(sport)}`; }
 function coreBase(sport, league) { return `${ESPN_CORE_ROOT}/${encodeURIComponent(sport)}/leagues/${leaguePath(league)}`; }
@@ -163,11 +169,12 @@ function inUkSaturdayClosedPeriod(value) {
   return parts.weekday === "Sat" && minutes >= 14 * 60 + 45 && minutes < 17 * 60 + 15;
 }
 
-async function pullFixtures(broadcastRules = DEFAULT_BROADCAST_RULES) {
+async function pullFixtures(broadcastRules = DEFAULT_BROADCAST_RULES, enabledCompetitions = DEFAULT_ENABLED_COMPETITIONS) {
   const now = Date.now();
+  const enabled = new Set(normaliseEnabledCompetitions(enabledCompetitions));
   const start = new Date(now - 21 * 86400000).toISOString().slice(0, 10).replaceAll("-", "");
   const end = new Date(now + 7 * 86400000).toISOString().slice(0, 10).replaceAll("-", "");
-  const programmes = await Promise.allSettled(SUPPORTED_COMPETITIONS.map(async config => ({
+  const programmes = await Promise.allSettled(SUPPORTED_COMPETITIONS.filter(config => enabled.has(`${config.sport}:${config.league}`)).map(async config => ({
     sport: config.sport,
     league: config.league,
     events: (await readJson(`${siteBase(config.sport)}/${leaguePath(config.league)}/scoreboard?dates=${start}-${end}`)).events || []
@@ -195,7 +202,7 @@ async function pullFixtures(broadcastRules = DEFAULT_BROADCAST_RULES) {
       const byCompetition = (LEAGUE_HIERARCHY[a.league] ?? 999) - (LEAGUE_HIERARCHY[b.league] ?? 999);
       return byCompetition || a.name.localeCompare(b.name);
     });
-  return { provider: "ESPN", fetchedAt: now, fixtures, leagueCoverage: coverage, broadcastRules, windowMinutes: 120 };
+  return { provider: "ESPN", fetchedAt: now, fixtures, leagueCoverage: coverage, broadcastRules, enabledCompetitions: [...enabled], windowMinutes: 120 };
 }
 async function refreshFixtureIndex(env) {
   const id = env.FIXTURE_INDEX.idFromName("supported-fixtures");
@@ -211,7 +218,7 @@ async function liveFixtures(env) {
   let response = await env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/fixtures");
   let data = await response.json();
   const staleEmpty = response.status === 404 || (!data.fixtures?.length && Date.now() - Number(data.fetchedAt || 0) > 6 * 3600000);
-  const staleSchema = data.windowMinutes !== 120 || !data.leagueCoverage?.["rugby-league:3"];
+  const staleSchema = data.windowMinutes !== 120 || !Array.isArray(data.enabledCompetitions);
   if (staleEmpty || staleSchema) { await refreshFixtureIndex(env); response = await env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/fixtures"); data = await response.json(); }
   const now = Date.now(), horizon = now + 2 * 60 * 60 * 1000, staleCutoff = now - 5 * 3600000;
   data.fixtures = (data.fixtures || []).filter(item => {
@@ -255,16 +262,30 @@ export class FixtureIndex {
   constructor(state) { this.state = state; }
   async fetch(request) {
     if (request.method === "POST" && new URL(request.url).pathname === "/refresh") {
-      try { const broadcastRules = { ...DEFAULT_BROADCAST_RULES, ...(await this.state.storage.get("broadcastRules") || {}) }; const data = await pullFixtures(broadcastRules); await this.state.storage.put("index", data); return json({ ...data, refreshed: true }); }
-      catch (error) { return json({ error: error.message || "Could not refresh fixture index" }, 502); }
+      try {
+        const saved = await this.state.storage.get("fixtureConfig") || {};
+        const broadcastRules = { ...DEFAULT_BROADCAST_RULES, ...(saved.broadcastRules || await this.state.storage.get("broadcastRules") || {}) };
+        const enabledCompetitions = normaliseEnabledCompetitions(saved.enabledCompetitions);
+        const data = await pullFixtures(broadcastRules, enabledCompetitions);
+        await this.state.storage.put("index", data);
+        return json({ ...data, refreshed: true });
+      } catch (error) { return json({ error: error.message || "Could not refresh fixture index" }, 502); }
     }
     if (request.method === "GET" && new URL(request.url).pathname === "/config") {
-      const broadcastRules = { ...DEFAULT_BROADCAST_RULES, ...(await this.state.storage.get("broadcastRules") || {}) };
-      return json({ broadcastRules });
+      const saved = await this.state.storage.get("fixtureConfig") || {};
+      const broadcastRules = { ...DEFAULT_BROADCAST_RULES, ...(saved.broadcastRules || await this.state.storage.get("broadcastRules") || {}) };
+      return json({ broadcastRules, enabledCompetitions: normaliseEnabledCompetitions(saved.enabledCompetitions), competitions: SUPPORTED_COMPETITIONS });
     }
     if (request.method === "POST" && new URL(request.url).pathname === "/config") {
-      try { const input = await request.json(); const broadcastRules = { ...DEFAULT_BROADCAST_RULES, ukPremierLeagueSaturdayBlackout: input.broadcastRules?.ukPremierLeagueSaturdayBlackout !== false }; await this.state.storage.put("broadcastRules", broadcastRules); return json({ broadcastRules, saved: true }); }
-      catch (error) { return json({ error: error.message || "Could not save fixture configuration" }, 400); }
+      try {
+        const input = await request.json();
+        const saved = await this.state.storage.get("fixtureConfig") || {};
+        const broadcastRules = { ...DEFAULT_BROADCAST_RULES, ...(saved.broadcastRules || {}), ukPremierLeagueSaturdayBlackout: input.broadcastRules?.ukPremierLeagueSaturdayBlackout !== false };
+        const enabledCompetitions = normaliseEnabledCompetitions(input.enabledCompetitions);
+        await this.state.storage.put("fixtureConfig", { broadcastRules, enabledCompetitions });
+        await this.state.storage.put("broadcastRules", broadcastRules);
+        return json({ broadcastRules, enabledCompetitions, saved: true });
+      } catch (error) { return json({ error: error.message || "Could not save fixture configuration" }, 400); }
     }
     if (request.method === "POST" && new URL(request.url).pathname === "/remove") {
       try {
