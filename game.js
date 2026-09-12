@@ -98,7 +98,8 @@ function transientRenderKey() {
     playerPreMatch: state.playerPreMatch || {},
     preMatch: state.preMatch || [],
     committedCalls: state.committedCalls || [],
-    leaderboard: state.leaderboard || []
+    leaderboard: state.leaderboard || [],
+    ui: { callsOpen, leaderboardOpen, finalLeaderboardDismissed, joinModalOpen, joinModalDismissed, submittedRoundId }
   });
 }
 function updateTransientClock() {
