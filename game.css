@@ -21,14 +21,6 @@
   .called-it-footer{gap:5px;margin:14px 0 2px;padding:12px 0 3px}
   .called-it-footer img{width:min(175px,58vw)}
 }
-/* Site-wide Called It palette and type */
-:root{--paper:#000;--ink:#f5efdf;--green:#020b18;--red:#ed5b4f;--yellow:#d6a14a;--muted:#9aa3ad}
-body{background:#000;color:var(--ink);font-family:'Bitcount Single',sans-serif}
-h1,h2,h3,p,button,input,small,b,strong,span{font-family:'Bitcount Single',sans-serif}
-body,body *{font-family:'Bitcount Single',sans-serif!important}
-.brand{color:var(--ink)}.card,.pre-modal,.leaderboard-modal{background:#020b18;color:var(--ink);border-color:var(--yellow)}
-.match-header,.broadcast-feed,.broadcast-feed-list{background:#020b18}
-
 /* Restore pre-teletext colour treatment */
 :root{--paper:#eee8dc;--ink:#07182d;--green:#07182d;--red:#ed5b4f;--yellow:#d6a14a;--muted:#596576}
 body{background:radial-gradient(circle at 90% 7%,rgba(237,91,79,.12),transparent 28rem),var(--paper);color:var(--ink)}
