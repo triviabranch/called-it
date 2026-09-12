@@ -64,12 +64,12 @@ async function readCorePlays(baseUrl) {
   return { ...first, items: [ ...(first.items || []), ...pages.flatMap(page => page.items || []) ] };
 }
 async function readCorePlayPage(baseUrl) {
+  // Live polling only needs the newest ESPN page. Historical pages are
+  // fetched separately by readCorePlays() when a player backfills a room.
   const first = await readJson(`${baseUrl}/plays?limit=300&page=1`);
   const pageCount = Math.min(Number(first.pageCount || 1), 10);
   if (pageCount <= 1) return first;
-  const latest = await readJson(`${baseUrl}/plays?limit=300&page=${pageCount}`);
-  const items = [...(first.items || []), ...(latest.items || [])];
-  return { ...first, items: [...new Map(items.map(item => [String(item.id || ""), item])).values()] };
+  return readJson(`${baseUrl}/plays?limit=300&page=${pageCount}`);
 }
 function fixture(item) {
   const competition = item?.competitions?.[0] || {};
