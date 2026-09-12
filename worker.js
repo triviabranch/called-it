@@ -418,8 +418,9 @@ export class MatchRoom {
   }
   async openLiveRound() {
     const type = this.nextLiveType(), f = this.room.fixture || {};
+    if (this.room.session.round?.status === "voting") { this.room.session.rounds ||= []; this.room.session.rounds.push(this.room.session.round); }
     const round = { id: "round-" + (this.room.session.nextRoundIndex || 0), targetEventId: null, targetType: type, question: "Who gets the next " + type + "?", choices: [{ key: "home", label: f.home?.name || "Home" }, { key: "away", label: f.away?.name || "Away" }], status: "voting", warmupEndsAt: null, voteEndsAt: null, result: null, openedAt: Date.now(), baselineEventIds: this.room.timeline.map(e => e.id) };
-    this.room.session.lastQuestionType = type; this.room.session.round = round; this.room.session.nextRoundIndex = (this.room.session.nextRoundIndex || 0) + 1; this.room.session.nextQuestionAt = null;
+    this.room.session.lastQuestionType = type; this.room.session.round = round; this.room.session.nextRoundIndex = (this.room.session.nextRoundIndex || 0) + 1; this.room.session.nextQuestionAt = nextLiveCallAt();
     this.room.events.unshift({ label: "Vote now", detail: round.question }); await this.save(); this.broadcast(); this.schedule(10000);
   }
   targetForQuestion(q) { return this.room.timeline.find(e => (q.type === "first-goal-team" && e.type === "goal") || (q.type === "first-goal-kick-time" && e.type === "goal-kick") || (q.type === "first-foul-team" && e.type === "foul")); }
@@ -460,8 +461,9 @@ export class MatchRoom {
       await this.refreshLive();
       this.settlePreMatch(s.clock);
       if (s.status === "running" && (!s.round || s.round.status === "settled") && this.room.fixture.state === "in" && Date.now() >= (s.nextQuestionAt || 0)) { await this.openLiveRound(); return; }
-      const liveTarget = s.round?.status === "voting" && this.room.timeline.find(e => !(s.round.baselineEventIds || []).includes(e.id) && e.type === s.round.targetType);
-      if (liveTarget || (s.round?.status === "voting" && this.room.fixture.state === "post")) { await this.settleLiveRound(s.round); return; }
+      const openRounds = [...(s.rounds || []), s.round].filter(round => round?.status === "voting");
+      const resolvedRound = openRounds.find(round => this.room.timeline.some(e => !(round.baselineEventIds || []).includes(e.id) && e.type === round.targetType) || this.room.fixture.state === "post");
+      if (resolvedRound) { await this.settleLiveRound(resolvedRound); return; }
       if (s.status === "running" && this.room.fixture.state === "post") { s.status = "complete"; await removeFixtureFromIndex(this.env, this.room.fixture.id); await this.save(); await this.state.storage.deleteAlarm(); this.broadcast(); return; }
       await this.save(); this.broadcast(); this.schedule(15000); return;
     }
@@ -493,7 +495,7 @@ export class MatchRoom {
     const correct = target?.team && this.room.fixture ? (target.team === this.room.fixture.home.name ? "home" : target.team === this.room.fixture.away.name ? "away" : null) : null;
     round.result = { correct, event: target?.text || `No ${round.targetType} recorded during the call` }; round.status = "settled";
     for (const p of this.room.players) { const answer = this.room.predictions[p.id]?.[round.id]; if (answer) p.calls = (p.calls || 0) + 1; if (correct && answer === correct) { p.points = (p.points || 0) + 100; p.correct = (p.correct || 0) + 1; } if (answer) p.rounds = (p.rounds || 0) + 1; }
-    this.rebuildLeaderboard(); this.room.session.nextQuestionAt = Date.now() + LIVE_CALL_DELAY_MIN_MS + Math.random() * (LIVE_CALL_DELAY_MAX_MS - LIVE_CALL_DELAY_MIN_MS); this.room.events.unshift({ label: "Prediction settled", detail: round.result.event }); await this.save(); this.broadcast(); this.schedule(15000);
+    this.rebuildLeaderboard(); this.room.events.unshift({ label: "Prediction settled", detail: round.result.event }); await this.save(); this.broadcast(); this.schedule(15000);
   }
   async webSocketMessage(ws, raw) {
     let m; try { m = JSON.parse(raw); } catch { return; } if (!this.room) await this.load(); this.room.lastActivity = Date.now();
