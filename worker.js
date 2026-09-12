@@ -209,7 +209,7 @@ async function pullFixtures(broadcastRules = DEFAULT_BROADCAST_RULES, enabledCom
       const byCompetition = (LEAGUE_HIERARCHY[a.league] ?? 999) - (LEAGUE_HIERARCHY[b.league] ?? 999);
       return byCompetition || a.name.localeCompare(b.name);
     });
-  return { provider: "ESPN", fetchedAt: now, fixtures, leagueCoverage: coverage, broadcastRules, enabledCompetitions: [...enabled], windowMinutes: 120 };
+  return { provider: "ESPN", fixtureIndexVersion: 2, fetchedAt: now, fixtures, leagueCoverage: coverage, broadcastRules, enabledCompetitions: [...enabled], windowMinutes: 120 };
 }
 async function refreshFixtureIndex(env) {
   const id = env.FIXTURE_INDEX.idFromName("supported-fixtures");
@@ -225,7 +225,7 @@ async function liveFixtures(env) {
   let response = await env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/fixtures");
   let data = await response.json();
   const staleEmpty = response.status === 404 || (!data.fixtures?.length && Date.now() - Number(data.fetchedAt || 0) > 60000);
-  const staleSchema = data.windowMinutes !== 120 || !Array.isArray(data.enabledCompetitions);
+  const staleSchema = data.fixtureIndexVersion !== 2 || data.windowMinutes !== 120 || !Array.isArray(data.enabledCompetitions);
   if (staleEmpty || staleSchema) { await refreshFixtureIndex(env); response = await env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/fixtures"); data = await response.json(); }
   const now = Date.now(), horizon = now + 2 * 60 * 60 * 1000, staleCutoff = now - 5 * 3600000;
   data.fixtures = (data.fixtures || []).filter(item => {
