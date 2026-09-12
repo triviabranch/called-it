@@ -545,7 +545,7 @@ export class MatchRoom {
     this.schedule(r.status === "warmup" ? r.warmupEndsAt - now : r.voteEndsAt - now);
   }
   async settleRound(round) {
-    const target = this.room.timeline.find(e => e.id === round.targetEventId); const correct = target?.team && this.room.fixture ? (target.team === this.room.fixture.home.name ? "home" : target.team === this.room.fixture.away.name ? "away" : null) : null;
+    const target = this.room.timeline.find(e => e.id === round.targetEventId); const correct = target ? this.keyForQuestion({ type: "first-goal-team" }, target) : null;
     round.result = { correct, event: target?.text || "Event occurred", eventId: target?.id || null }; round.status = "settled";
     for (const p of this.room.players) {
       const answer = this.room.predictions[p.id]?.[round.id]; const hit = correct && answer === correct;
@@ -559,7 +559,7 @@ export class MatchRoom {
   }
   async settleLiveRound(round) {
     const baseline = new Set(round.baselineEventIds || []), target = this.room.timeline.find(e => !baseline.has(e.id) && e.type === round.targetType);
-    const correct = target?.team && this.room.fixture ? (target.team === this.room.fixture.home.name ? "home" : target.team === this.room.fixture.away.name ? "away" : null) : null;
+    const correct = target ? this.keyForQuestion({ type: "first-goal-team" }, target) : null;
     round.result = { correct, event: target?.text || `No ${round.targetType} recorded during the call`, eventId: target?.id || null }; round.status = "settled";
     for (const p of this.room.players) { const answer = this.room.predictions[p.id]?.[round.id]; if (answer) p.calls = (p.calls || 0) + 1; if (correct && answer === correct) { p.points = (p.points || 0) + 100; p.correct = (p.correct || 0) + 1; } if (answer) p.rounds = (p.rounds || 0) + 1; }
     this.rebuildLeaderboard(); this.room.events.unshift({ label: "Prediction settled", detail: round.result.event }); await this.save(); this.broadcast(); this.schedule(15000);
