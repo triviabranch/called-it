@@ -567,7 +567,7 @@ export class MatchRoom {
     const presentedAtClock = Number(this.room.session.clock) || 0, presentedAtClockDisplay = this.room.session.clockDisplay || null;
     const round = { id: "round-" + (this.room.session.nextRoundIndex || 0), scheduledCallAt, targetEventId: null, targetType: type, question: this.liveQuestion(type), choices: [{ key: "home", label: f.home?.name || "Home" }, { key: "away", label: f.away?.name || "Away" }], status: "voting", warmupEndsAt: null, voteEndsAt: null, result: null, openedAt: Date.now(), presentedAtClock, presentedAtClockDisplay, presentedMatchTime: formatMatchTime(presentedAtClock, presentedAtClockDisplay), baselineEventIds: this.room.timeline.map(e => e.id) };
     this.room.session.lastQuestionType = type; this.room.session.round = round; this.room.session.nextRoundIndex = (this.room.session.nextRoundIndex || 0) + 1; this.room.session.nextQuestionAt = scheduledCallAt + LIVE_CALL_INTERVAL_MS;
-    this.room.events.unshift({ label: "Vote now", detail: round.question }); await this.save(); this.broadcast(); this.schedule(10000);
+    this.room.events.unshift({ label: "Vote now", detail: round.question }); await this.save(); this.broadcast(); this.schedule(Math.min(LIVE_PROVIDER_POLL_MS, Math.max(250, (this.room.session.nextQuestionAt || Date.now() + LIVE_PROVIDER_POLL_MS) - Date.now())));
   }
   targetForQuestion(q) { return this.room.timeline.find(e => (((q.type === "first-goal-team" || q.type === "next-goal-team") && e.type === "goal") || ((q.type === "first-goal-kick-time" || q.type === "next-goal-kick-time") && e.type === "goal-kick") || ((q.type === "first-foul-team" || q.type === "next-foul-team") && e.type === "foul")) && (q.afterOffset == null || e.offset > q.afterOffset)); }
   keyForQuestion(q, target) {
@@ -608,17 +608,39 @@ export class MatchRoom {
     this.room.session.round = round; this.room.session.status = "warmup"; this.room.events.unshift({ label: "Prediction warming up", detail: round.question });
     await this.save(); this.broadcast(); this.schedule(Math.max(250, round.warmupEndsAt - now));
   }
+  async finishLiveSession() {
+    const session = this.room.session;
+    session.rounds ||= [];
+    if (session.round && !session.rounds.some(round => round.id === session.round.id)) session.rounds.push(session.round);
+    for (const round of session.rounds) {
+      if (round.status === "voting" || round.status === "locked") {
+        round.result = { correct: null, event: "Full time", eventId: null };
+        round.status = "settled";
+      }
+    }
+    session.round = null;
+    session.status = "complete";
+    session.finishedAt = Date.now();
+    session.nextQuestionAt = null;
+    this.rebuildLeaderboard();
+    await removeFixtureFromIndex(this.env, this.room.fixture?.id);
+    await this.removeAdminRoom();
+    await this.save();
+    await this.state.storage.deleteAlarm();
+    this.broadcast();
+  }
   async advance() {
     const s = this.room.session, r = s.round;
     if (this.room.mode === "live" || (this.room.fixture?.id && s.mode !== "simulation")) {
       await this.refreshLive();
       this.anchorLiveSchedule();
       this.settlePreMatch(s.clock);
+      if (String(this.room.fixture?.state || "").toLowerCase() === "post") { await this.finishLiveSession(); return; }
       const fixtureState = String(this.room.fixture?.state || "").toLowerCase(), fixtureStatus = String(this.room.fixture?.status || ""), hasLiveTimeline = this.room.timeline.some(event => event.offset != null); const fixtureIsLive = fixtureState === "in" || (fixtureState !== "post" && hasLiveTimeline), fixtureIsAtHalfTime = /half[\s-]?time|end of (the )?1st half|\bHT\b|\binterval\b/i.test(fixtureStatus); if (s.status === "running" && fixtureIsLive && Date.now() >= (s.nextQuestionAt || 0)) { if (fixtureIsAtHalfTime) { while (s.nextQuestionAt && s.nextQuestionAt <= Date.now()) s.nextQuestionAt += LIVE_CALL_INTERVAL_MS; await this.save(); this.broadcast(); this.schedule(LIVE_PROVIDER_POLL_MS); return; } await this.openLiveRound(); return; }
       const openRounds = [...(s.rounds || []), s.round].filter(round => round?.status === "voting");
       const resolvedRound = openRounds.find(round => this.room.timeline.some(e => !(round.baselineEventIds || []).includes(e.id) && e.type === round.targetType) || this.room.fixture.state === "post");
       if (resolvedRound) { await this.settleLiveRound(resolvedRound); return; }
-      if (s.status === "running" && this.room.fixture.state === "post") { s.status = "complete"; await removeFixtureFromIndex(this.env, this.room.fixture.id); await this.removeAdminRoom(); await this.save(); await this.state.storage.deleteAlarm(); this.broadcast(); return; }
+      if (s.status === "complete") return;
       await this.save(); this.broadcast(); this.schedule(Math.min(LIVE_PROVIDER_POLL_MS, Math.max(250, (s.nextQuestionAt || Date.now() + LIVE_PROVIDER_POLL_MS) - Date.now()))); return;
     }
     if (!r) return;
