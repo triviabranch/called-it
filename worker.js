@@ -40,9 +40,9 @@ async function readJson(url) {
   return response.json();
 }
 async function readCorePlays(baseUrl) {
-  const first = await readJson(`${baseUrl}/plays?limit=300&page=1`);
+  const first = await readJson(`${baseUrl}/plays?limit=300&page=1&lang=en&region=us`);
   const pageCount = Math.min(Number(first.pageCount || 1), 10);
-  const pages = await Promise.all(Array.from({ length: pageCount - 1 }, (_, i) => readJson(`${baseUrl}/plays?limit=300&page=${i + 2}`)));
+  const pages = await Promise.all(Array.from({ length: pageCount - 1 }, (_, i) => readJson(`${baseUrl}/plays?limit=300&page=${i + 2}&lang=en&region=us`)));
   return { ...first, items: [ ...(first.items || []), ...pages.flatMap(page => page.items || []) ] };
 }
 async function readCorePlayPage(baseUrl) { return readJson(`${baseUrl}/plays?limit=300&page=1`); }
