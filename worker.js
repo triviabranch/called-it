@@ -29,9 +29,8 @@ function normaliseEnabledCompetitions(values) {
 function siteBase(sport) { return `${ESPN_SITE_ROOT}/${encodeURIComponent(sport)}`; }
 function coreBase(sport, league) { return `${ESPN_CORE_ROOT}/${encodeURIComponent(sport)}/leagues/${leaguePath(league)}`; }
 const DEFAULT_BROADCAST_RULES = { ukPremierLeagueSaturdayBlackout: true };
-const LIVE_CALL_DELAY_MIN_MS = 7 * 60 * 1000;
-const LIVE_CALL_DELAY_MAX_MS = 8 * 60 * 1000;
-const nextLiveCallAt = () => Date.now() + LIVE_CALL_DELAY_MIN_MS + Math.random() * (LIVE_CALL_DELAY_MAX_MS - LIVE_CALL_DELAY_MIN_MS);
+const LIVE_CALL_INTERVAL_MS = 7.5 * 60 * 1000;
+const nextLiveCallAt = () => Date.now() + LIVE_CALL_INTERVAL_MS;
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "access-control-allow-origin": "*" } });
@@ -584,7 +583,7 @@ export class MatchRoom {
     const correct = target ? this.keyForQuestion({ type: "first-goal-team" }, target) : null;
     round.result = { correct, event: target?.text || `No ${round.targetType} recorded during the call`, eventId: target?.id || null }; round.status = "settled";
     for (const p of this.room.players) { const answer = this.room.predictions[p.id]?.[round.id]; if (answer) p.calls = (p.calls || 0) + 1; if (correct && answer === correct) { p.points = (p.points || 0) + 100; p.correct = (p.correct || 0) + 1; } if (answer) p.rounds = (p.rounds || 0) + 1; }
-    this.rebuildLeaderboard(); this.room.session.nextQuestionAt = nextLiveCallAt(); this.room.events.unshift({ label: "Prediction settled", detail: round.result.event }); await this.save(); this.broadcast(); this.schedule(Math.max(250, (this.room.session.nextQuestionAt || Date.now() + 15000) - Date.now()));
+    this.rebuildLeaderboard(); this.room.events.unshift({ label: "Prediction settled", detail: round.result.event }); await this.save(); this.broadcast(); this.schedule(Math.max(250, (this.room.session.nextQuestionAt || Date.now() + 15000) - Date.now()));
   }
   async webSocketMessage(ws, raw) {
     let m; try { m = JSON.parse(raw); } catch { return; } if (!this.room) await this.load(); this.room.lastActivity = Date.now();
