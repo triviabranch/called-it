@@ -522,9 +522,18 @@ export class MatchRoom {
     return { seconds: Math.max(this.room.session.clock || 0, timelineSeconds), display: null };
   }
   nextLiveType() {
-    const types = ["corner", "card", "goal", "foul"];
-    const previous = this.room.session.lastQuestionType;
-    return types.find(type => type !== previous) || "corner";
+    const types = ["corner", "foul", "shot", "goal-kick", "substitution", "goal"];
+    return types[(Number(this.room.session.nextRoundIndex) || 0) % types.length];
+  }
+  liveQuestion(type) {
+    return ({
+      corner: "Which team gets the next corner?",
+      foul: "Which team commits the next foul?",
+      shot: "Which team has the next shot?",
+      "goal-kick": "Which team gets the next goal kick?",
+      substitution: "Which team makes the next substitution?",
+      goal: "Which team scores next?"
+    })[type] || "Which team has the next match event?";
   }
   anchorLiveSchedule(now = Date.now()) {
     const kickoff = Date.parse(this.room.fixture?.date);
@@ -555,7 +564,7 @@ export class MatchRoom {
     const type = this.nextLiveType(), f = this.room.fixture || {};
     if (this.room.session.round?.status === "voting") { this.room.session.rounds ||= []; this.room.session.rounds.push(this.room.session.round); }
     const presentedAtClock = Number(this.room.session.clock) || 0, presentedAtClockDisplay = this.room.session.clockDisplay || null;
-    const round = { id: "round-" + (this.room.session.nextRoundIndex || 0), scheduledCallAt, targetEventId: null, targetType: type, question: "Who gets the next " + type + "?", choices: [{ key: "home", label: f.home?.name || "Home" }, { key: "away", label: f.away?.name || "Away" }], status: "voting", warmupEndsAt: null, voteEndsAt: null, result: null, openedAt: Date.now(), presentedAtClock, presentedAtClockDisplay, presentedMatchTime: formatMatchTime(presentedAtClock, presentedAtClockDisplay), baselineEventIds: this.room.timeline.map(e => e.id) };
+    const round = { id: "round-" + (this.room.session.nextRoundIndex || 0), scheduledCallAt, targetEventId: null, targetType: type, question: this.liveQuestion(type), choices: [{ key: "home", label: f.home?.name || "Home" }, { key: "away", label: f.away?.name || "Away" }], status: "voting", warmupEndsAt: null, voteEndsAt: null, result: null, openedAt: Date.now(), presentedAtClock, presentedAtClockDisplay, presentedMatchTime: formatMatchTime(presentedAtClock, presentedAtClockDisplay), baselineEventIds: this.room.timeline.map(e => e.id) };
     this.room.session.lastQuestionType = type; this.room.session.round = round; this.room.session.nextRoundIndex = (this.room.session.nextRoundIndex || 0) + 1; this.room.session.nextQuestionAt = scheduledCallAt + LIVE_CALL_INTERVAL_MS;
     this.room.events.unshift({ label: "Vote now", detail: round.question }); await this.save(); this.broadcast(); this.schedule(10000);
   }
