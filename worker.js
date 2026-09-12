@@ -480,24 +480,30 @@ export class MatchRoom {
   }
   liveClock(fixtureData, summary) {
     const status = fixtureData.status || {};
+    const providerStatus = summary?.header?.competitions?.[0]?.status || summary?.competitions?.[0]?.status || {};
     const detail = String(status.shortDetail || status.detail || "").trim();
-    const rawClock = String(summary?.header?.competitions?.[0]?.status?.displayClock || status.displayClock || "").trim();
-    const stoppage = rawClock.match(/(?:^|\\s)(\\d+)\\s*\\+\\s*(\\d+)(?:\\s|$)/) || detail.match(/(?:^|\\s)(\\d+)\\s*['’]?\\s*\\+\\s*(\\d+)(?:\\s|$)/);
+    const rawClock = String(providerStatus.displayClock ?? providerStatus.clockDisplay ?? status.displayClock ?? "").trim();
+    const numericClock = Number(providerStatus.clock);
+    if (Number.isFinite(numericClock) && numericClock > 0) {
+      return { seconds: numericClock, display: null };
+    }
+    const stoppage = rawClock.match(/^(\d{1,3})\s*(?:\+|['’])\s*(\d{1,2})$/) || detail.match(/(?:^|\s)(\d{1,3})\s*(?:\+|['’])\s*(\d{1,2})(?:\s|$)/);
     if (stoppage) {
       const minutes = Number(stoppage[1]), extra = Number(stoppage[2]);
       return { seconds: (minutes + extra) * 60, display: minutes + "+" + extra };
     }
-    const normalClock = rawClock.match(/(?:^|\\s)(\\d+)\\s*:\\s*(\\d{1,2})(?:\\s|$)/) || detail.match(/(?:^|\\s)(\\d+)\\s*:\\s*(\\d{1,2})(?:\\s|$)/);
+    const normalClock = rawClock.match(/^(\d{1,3})\s*:\s*(\d{1,2})$/) || detail.match(/(?:^|\s)(\d{1,3})\s*:\s*(\d{1,2})(?:\s|$)/);
     if (normalClock) {
       const minutes = Number(normalClock[1]), seconds = Number(normalClock[2]);
       return { seconds: minutes * 60 + seconds, display: minutes + ":" + String(seconds).padStart(2, "0") };
     }
-    const minuteOnly = rawClock.match(/^(\\d{1,3})\\s*['’]?$/) || detail.match(/(?:^|\\s)(\\d{1,3})\\s*['’](?:\\s|$)/);
+    const minuteOnly = rawClock.match(/^(\d{1,3})\s*['’]?$/) || detail.match(/(?:^|\s)(\d{1,3})\s*['’](?:\s|$)/);
     if (minuteOnly) {
       const minutes = Number(minuteOnly[1]);
       return { seconds: minutes * 60, display: null };
     }
-    return { seconds: this.room.session.clock || 0, display: null };
+    const timelineSeconds = Math.max(0, ...this.room.timeline.map(event => Number(event.offset) || 0));
+    return { seconds: Math.max(this.room.session.clock || 0, timelineSeconds), display: null };
   }
   nextLiveType() {
     const types = ["corner", "card", "goal", "foul"];
