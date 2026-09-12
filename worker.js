@@ -274,6 +274,14 @@ export default {
     if (url.pathname === "/admin" || url.pathname === "/admin/") return env.ASSETS.fetch(new Request(new URL("/admin.html", request.url), request));
     if (url.pathname === "/api/admin/refresh-fixtures" && request.method === "POST") return refreshFixtureIndex(env);
     if (url.pathname === "/api/admin/live-rooms" && request.method === "GET") { const id = env.FIXTURE_INDEX.idFromName("supported-fixtures"); return env.FIXTURE_INDEX.get(id).fetch(new Request("https://fixture-index/live-rooms")); }
+    if (url.pathname === "/api/admin/kill-room" && request.method === "POST") {
+      try {
+        const input = await request.json();
+        if (!input.roomId) return json({ error: "roomId is required" }, 400);
+        const id = env.MATCH_ROOM.idFromString(String(input.roomId));
+        return env.MATCH_ROOM.get(id).fetch(new Request("https://room/kill", { method: "POST" }));
+      } catch (error) { return json({ error: error.message || "Could not kill room" }, 400); }
+    }
     if (url.pathname === "/api/admin/fixture-config" && (request.method === "GET" || request.method === "POST")) { const id = env.FIXTURE_INDEX.idFromName("supported-fixtures"); return env.FIXTURE_INDEX.get(id).fetch(new Request(`https://fixture-index/config`, { method: request.method, body: request.method === "POST" ? await request.text() : undefined, headers: request.method === "POST" ? { "content-type": "application/json" } : undefined })); }
     if (url.pathname === "/api/live-fixtures") return liveFixtures(env);
     if (url.pathname.startsWith("/api/espn/")) { const response = await espnApi(url); if (response) return response; }
@@ -390,6 +398,16 @@ export class MatchRoom {
         }
       } catch {}
       await this.save(); return Response.json({ roomId: this.state.id.toString(), state: this.public() });
+    }
+    if (request.method === "POST" && new URL(request.url).pathname === "/kill") {
+      await this.load();
+      await this.removeAdminRoom();
+      for (const socket of this.sockets) { try { socket.close(1000, "Room ended by admin"); } catch {} }
+      this.sockets.clear();
+      await this.state.storage.deleteAlarm();
+      await this.state.storage.delete("room");
+      this.room = null;
+      return json({ killed: true });
     }
     return new Response("Room unavailable", { status: 404 });
   }
