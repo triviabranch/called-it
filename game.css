@@ -53,3 +53,10 @@ body,body *{font-family:Arial,sans-serif!important}
 h1,h2,.card h2,.match-header h1,.call-modal h2,.leaderboard-modal h2{font-family:Georgia,serif!important}
 .eyebrow,.phase,.countdown,.number-call,.fixture-status,.fine-print,.feed-live,.broadcast-event .event-minute,.called-it-footer span,.stats-heading span,.stat-tile b,.stat-tile small{font-family:monospace!important}
 .join-modal-name{display:block;color:var(--muted);font:11px monospace;letter-spacing:.1em;text-transform:uppercase;margin:12px 0}.join-modal-name input{display:block;margin:7px 0 0;background:var(--paper);text-transform:none;letter-spacing:normal}.join-later{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:16px 0 4px;padding:10px 0;border-top:1px solid rgba(7,24,45,.18);border-bottom:1px solid rgba(7,24,45,.18);color:var(--muted);font:11px monospace;text-transform:uppercase;letter-spacing:.08em}.join-later button{width:auto;margin:0;padding:9px 12px;font-size:11px}.join-count{margin-top:8px}
+/* Call chronology */
+.call-row{display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid rgba(7,24,45,.14)}
+.call-row:last-child{border-bottom:0}
+.call-time{font:700 11px monospace;color:var(--red);white-space:nowrap}
+.call-question{min-width:0}
+.call-row small{color:var(--muted)}
+@media(max-width:500px){.call-row{grid-template-columns:auto 1fr auto;gap:6px;font-size:12px}.call-row .call-question{grid-column:2}.call-row small{grid-column:2}.call-row .call-status{grid-column:3;grid-row:1 / span 2}.call-time{grid-row:1 / span 2}}
