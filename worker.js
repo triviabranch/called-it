@@ -524,7 +524,7 @@ export class MatchRoom {
   async openLiveRound() {
     const scheduledCallAt = Number(this.room.session.nextQuestionAt) || nextLiveCallAt(this.room.fixture);
     const rounds = [...(this.room.session.rounds || []), this.room.session.round].filter(Boolean);
-    const existing = rounds.find(round => Number(round.scheduledCallAt) === scheduledCallAt);
+    const existing = rounds.find(round => Number(round.scheduledCallAt) === scheduledCallAt || (Number(round.openedAt) > 0 && Math.abs(Number(round.openedAt) - scheduledCallAt) <= 120000));
     if (existing) {
       this.room.session.nextQuestionAt = scheduledCallAt + LIVE_CALL_INTERVAL_MS;
       await this.save(); this.broadcast(); this.schedule(10000);
