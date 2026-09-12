@@ -1,7 +1,19 @@
 let ws, roomId, state, playerId, role, submittedRoundId = null, leaderboardOpen = false, callsOpen = false;
 const app = document.querySelector("#app"), query = new URLSearchParams(location.search);
 const esc = value => String(value ?? "").replace(/[&<>\"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'\"':"&quot;"}[c]));
-const clock = (seconds, display) => { const raw = String(display || "").trim(); const stoppage = raw.match(/^(\d{1,3})\s*(?:\+|:|['’])\s*(\d{1,2})$/); if (stoppage) return `${Number(stoppage[1])}+${Number(stoppage[2])}`; if (/^\d{3,4}$/.test(raw)) { const extraDigits = raw.length === 4 ? 2 : 1; return `${Number(raw.slice(0, -extraDigits))}+${Number(raw.slice(-extraDigits))}`; } const s = Math.max(0, Math.floor(seconds || 0)); return `${String(Math.floor(s / 60)).padStart(2,"0")}:${String(s % 60).padStart(2,"0")}`; };
+const clock = (seconds, display) => {
+  const raw = String(display || "").trim();
+  const stoppage = raw.match(/^(\d{1,3})\s*(?:\+|['’])\s*(\d{1,2})$/);
+  if (stoppage) return `${Number(stoppage[1])}+${Number(stoppage[2])}`;
+  const normal = raw.match(/^(\d{1,3}):(\d{1,2})$/);
+  if (normal) return `${String(Number(normal[1])).padStart(2,"0")}:${String(Number(normal[2])).padStart(2,"0")}`;
+  if (/^\d{3,4}$/.test(raw)) {
+    const extraDigits = raw.length === 4 ? 2 : 1;
+    return `${Number(raw.slice(0, -extraDigits))}+${Number(raw.slice(-extraDigits))}`;
+  }
+  const s = Math.max(0, Math.floor(seconds || 0));
+  return `${String(Math.floor(s / 60)).padStart(2,"0")}:${String(s % 60).padStart(2,"0")}`;
+};
 const send = message => { if (ws?.readyState === 1) ws.send(JSON.stringify(message)); };
 
 async function getFixtures() {
