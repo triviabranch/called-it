@@ -56,7 +56,7 @@ async function joinFixture(fixture, league) {
 }
 function connect() { ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/room/${roomId}`); ws.onmessage = event => { const message = JSON.parse(event.data); if (message.type === "identity") { playerId = message.playerId; localStorage.setItem(`calledItPlayer:${roomId}`, playerId); } if (message.state) { state = message.state; render(); } }; ws.onclose = () => setTimeout(connect, 1500); }
 function preMatchCard(me) {
-  const questions = state.preMatch || [], answered = state.playerStatus?.[playerId] || [], current = questions.find(q => !answered.includes(q.id) && !q.settled);
+  const questions = state.playerPreMatch?.[playerId] || state.preMatch || [], answered = state.playerStatus?.[playerId] || [], current = questions.find(q => !answered.includes(q.id) && !q.settled);
   if (!current) return '<div class="pre-complete">Your three calls are in. Stay with the match — the next live question will appear here.</div>';
   const answerUi = current.input ? `<label class="number-call">${esc(current.input.suffix)}<input id="preNumber" type="number" min="${current.input.min}" max="${current.input.max}" step="${current.input.step}" value="${current.input.min}"></label><button class="answer" data-pre-submit="${esc(current.id)}">Submit call</button>` : `<div class="answers">${current.choices.map(a => `<button class="answer" data-pre="${esc(a.key)}">${esc(a.label)}</button>`).join("")}</div>`;
   return `<div class="pre-modal-backdrop"><div class="pre-modal"><div class="phase">Your pre-match calls · ${answered.length + 1} of ${questions.length}</div><h2>${esc(current.question)}</h2><p class="muted">Make your call before kick-off.</p>${answerUi}</div></div>`;
@@ -71,7 +71,7 @@ function simulationPanel() {
 function render() {
   if (!state) return;
   const existingFeed = document.querySelector(".broadcast-feed-list"), feedWasNearTop = !existingFeed || existingFeed.scrollTop < 40, feedScrollTop = existingFeed?.scrollTop || 0;
-  const f = state.fixture || { home:{name:"Home"}, away:{name:"Away"} }, r = state.session?.round, me = (state.players || []).find(p => p.id === playerId), answered = state.playerStatus?.[playerId] || [], incomplete = (state.preMatch || []).some(q => !answered.includes(q.id) && !q.settled);
+  const f = state.fixture || { home:{name:"Home"}, away:{name:"Away"} }, r = state.session?.round, me = (state.players || []).find(p => p.id === playerId), answered = state.playerStatus?.[playerId] || [], availablePreMatch = state.playerPreMatch?.[playerId] || state.preMatch || [], incomplete = availablePreMatch.some(q => !answered.includes(q.id) && !q.settled);
   if (submittedRoundId && submittedRoundId !== r?.id) submittedRoundId = null;
   const fixtureStatus = String(state.fixture?.status || "Fixture room"), isHalfTime = /half[\s-]?time|end of (the )?1st half/i.test(fixtureStatus), statusIncludesClock = /\b\d{1,3}(?::\d{2}|\+\d{1,2}|['’])/.test(fixtureStatus), matchStatus = isHalfTime ? "HALF-TIME" : statusIncludesClock ? "LIVE" : fixtureStatus;
   const now = Date.now(), remaining = r?.status === "voting" && r.voteEndsAt ? Math.max(0, Math.ceil((r.voteEndsAt - now) / 1000)) : 0, voteLabel = r?.status === "voting" && r.voteEndsAt && state.session?.mode === "simulation" ? `${remaining}s` : "";
