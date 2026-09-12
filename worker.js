@@ -1,8 +1,27 @@
-const ESPN_SITE = "https://site.web.api.espn.com/apis/site/v2/sports/soccer";
-const ESPN_CORE = "https://sports.core.api.espn.com/v2/sports/soccer/leagues";
-const SUPPORTED_LEAGUES = ["eng.1", "eng.2", "sco.1", "esp.1", "ger.1", "ita.1", "fra.1", "usa.1", "aus.1"];
-const LEAGUE_HIERARCHY = Object.fromEntries(SUPPORTED_LEAGUES.map((league, index) => [league, index]));
-const LEAGUE_NAMES = { "eng.1": "Premier League", "eng.2": "Championship", "sco.1": "Scottish Premiership", "esp.1": "LaLiga", "ger.1": "Bundesliga", "ita.1": "Serie A", "fra.1": "Ligue 1", "usa.1": "MLS", "aus.1": "A-League Men" };
+const ESPN_SITE_ROOT = "https://site.web.api.espn.com/apis/site/v2/sports";
+const ESPN_CORE_ROOT = "https://sports.core.api.espn.com/v2/sports";
+const SUPPORTED_COMPETITIONS = [
+  { sport: "soccer", league: "eng.1", name: "Premier League", order: 0 },
+  { sport: "soccer", league: "eng.2", name: "Championship", order: 1 },
+  { sport: "soccer", league: "sco.1", name: "Scottish Premiership", order: 2 },
+  { sport: "soccer", league: "esp.1", name: "LaLiga", order: 3 },
+  { sport: "soccer", league: "ger.1", name: "Bundesliga", order: 4 },
+  { sport: "soccer", league: "ita.1", name: "Serie A", order: 5 },
+  { sport: "soccer", league: "fra.1", name: "Ligue 1", order: 6 },
+  { sport: "soccer", league: "usa.1", name: "MLS", order: 7 },
+  { sport: "soccer", league: "aus.1", name: "A-League Men", order: 8 },
+  { sport: "rugby-league", league: "3", name: "NRL", order: 9 }
+];
+const SUPPORTED_LEAGUES = SUPPORTED_COMPETITIONS.map(item => item.league);
+const LEAGUE_HIERARCHY = Object.fromEntries(SUPPORTED_COMPETITIONS.map(item => [item.league, item.order]));
+const LEAGUE_NAMES = Object.fromEntries(SUPPORTED_COMPETITIONS.map(item => [item.league, item.name]));
+function competitionConfig(sport, league) {
+  return SUPPORTED_COMPETITIONS.find(item => item.sport === sport && item.league === league)
+    || SUPPORTED_COMPETITIONS.find(item => item.league === league)
+    || SUPPORTED_COMPETITIONS[0];
+}
+function siteBase(sport) { return `${ESPN_SITE_ROOT}/${encodeURIComponent(sport)}`; }
+function coreBase(sport, league) { return `${ESPN_CORE_ROOT}/${encodeURIComponent(sport)}/leagues/${leaguePath(league)}`; }
 const DEFAULT_BROADCAST_RULES = { ukPremierLeagueSaturdayBlackout: true };
 
 function json(data, status = 200) {
@@ -80,17 +99,17 @@ async function espnApi(url) {
   try {
     const bits = url.pathname.split("/").filter(Boolean);
     const league = url.searchParams.get("league") || "eng.1";
-    const slug = leaguePath(league);
+    const config = competitionConfig(null, league), slug = leaguePath(config.league), sport = config.sport;
     if (url.pathname === "/api/espn/fixtures") {
       const date = url.searchParams.get("date");
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date || "")) return json({ error: "date must be YYYY-MM-DD" }, 400);
-      const data = await readJson(`${ESPN_SITE}/${slug}/scoreboard?dates=${date.replaceAll("-", "")}`);
-      return json({ provider: "ESPN", league, date, fixtures: (data.events || []).map(item => ({ ...fixture(item), league, competition: LEAGUE_NAMES[league] || league })), raw: data });
+      const data = await readJson(`${siteBase(sport)}/${slug}/scoreboard?dates=${date.replaceAll("-", "")}`);
+      return json({ provider: "ESPN", league, date, fixtures: (data.events || []).map(item => ({ ...fixture(item), sport, league: config.league, competition: config.name || config.league })), raw: data });
     }
     if (bits[2] === "match" && bits[3]) {
       const id = bits[3];
-      const summaryUrl = `${ESPN_SITE}/${slug}/summary?event=${encodeURIComponent(id)}`;
-      const coreBase = `${ESPN_CORE}/${slug}/events/${encodeURIComponent(id)}/competitions/${encodeURIComponent(id)}`;
+      const summaryUrl = `${siteBase(sport)}/${slug}/summary?event=${encodeURIComponent(id)}`;
+      const coreBase = `${coreBase(sport, slug)}/events/${encodeURIComponent(id)}/competitions/${encodeURIComponent(id)}`;
       const [summary, plays, situation, probabilities] = await Promise.allSettled([
         readJson(summaryUrl),
         readCorePlays(coreBase),
@@ -117,12 +136,12 @@ async function espnApi(url) {
   return null;
 }
 
-async function validateLeague(league, programme) {
+async function validateLeague(sport, league, programme) {
   try {
     const matches = programme.filter(event => event.status?.type?.state === "post").slice(-3);
     const rows = await Promise.all(matches.map(async match => {
       try {
-        const base = `${ESPN_CORE}/${leaguePath(league)}/events/${encodeURIComponent(match.id)}/competitions/${encodeURIComponent(match.id)}`;
+        const base = `${coreBase(sport, league)}/events/${encodeURIComponent(match.id)}/competitions/${encodeURIComponent(match.id)}`;
         const plays = await readJson(`${base}/plays?limit=300&page=1`);
         const events = (plays.items || []).map((item, index) => normaliseEvent(item, index, "coverage-core")).filter(event => event.type !== "other" && event.offset != null);
         return { id: String(match.id), events: events.length, types: [...new Set(events.map(event => event.type))] };
@@ -130,9 +149,11 @@ async function validateLeague(league, programme) {
     }));
     const has = type => rows.filter(row => row.types.includes(type)).length, sampleSize = rows.length;
     const averageEvents = sampleSize ? Math.round(rows.reduce((sum, row) => sum + row.events, 0) / sampleSize) : 0;
-    const approved = sampleSize >= 3 && averageEvents >= 6 && has("corner") / sampleSize >= 2 / 3 && has("foul") / sampleSize >= 2 / 3 && has("card") / sampleSize >= 1 / 3;
-    return { league, approved, checkedAt: Date.now(), sampleSize, matchesWithData: rows.filter(row => row.events > 0).length, averageEvents, coverage: { corner: has("corner"), foul: has("foul"), card: has("card"), goal: has("goal"), substitution: has("substitution"), shot: has("shot") }, reason: approved ? "sufficient timestamped event coverage" : "insufficient repeatable in-play event coverage" };
-  } catch (error) { return { league, approved: false, checkedAt: Date.now(), sampleSize: 0, matchesWithData: 0, averageEvents: 0, coverage: {}, reason: error.message || "coverage check failed" }; }
+    const approved = sport === "soccer"
+      ? sampleSize >= 3 && averageEvents >= 6 && has("corner") / sampleSize >= 2 / 3 && has("foul") / sampleSize >= 2 / 3 && has("card") / sampleSize >= 1 / 3
+      : sampleSize >= 1 && averageEvents >= 1;
+    return { sport, league, approved, checkedAt: Date.now(), sampleSize, matchesWithData: rows.filter(row => row.events > 0).length, averageEvents, coverage: { corner: has("corner"), foul: has("foul"), card: has("card"), goal: has("goal"), substitution: has("substitution"), shot: has("shot") }, reason: approved ? "sufficient timestamped event coverage" : "insufficient repeatable in-play event coverage" };
+  } catch (error) { return { sport, league, approved: false, checkedAt: Date.now(), sampleSize: 0, matchesWithData: 0, averageEvents: 0, coverage: {}, reason: error.message || "coverage check failed" }; }
 }
 
 function inUkSaturdayClosedPeriod(value) {
@@ -143,17 +164,38 @@ function inUkSaturdayClosedPeriod(value) {
 }
 
 async function pullFixtures(broadcastRules = DEFAULT_BROADCAST_RULES) {
-  const start = new Date(Date.now() - 21 * 86400000).toISOString().slice(0, 10).replaceAll("-", ""), end = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10).replaceAll("-", "");
-  const programmes = await Promise.allSettled(SUPPORTED_LEAGUES.map(async league => ({ league, events: (await readJson(`${ESPN_SITE}/${leaguePath(league)}/scoreboard?dates=${start}-${end}`)).events || [] })));
-  const coverageResults = await Promise.all(programmes.map(result => result.status === "fulfilled" ? validateLeague(result.value.league, result.value.events) : ({ league: "unknown", approved: false, checkedAt: Date.now(), sampleSize: 0, matchesWithData: 0, averageEvents: 0, coverage: {}, reason: result.reason?.message || "programme pull failed" })));
-  const coverage = Object.fromEntries(coverageResults.map(result => [result.league, result]));
-  const fixtures = programmes.flatMap(result => result.status === "fulfilled" ? result.value.events.map(item => ({ ...fixture(item), league: result.value.league, competition: LEAGUE_NAMES[result.value.league] || result.value.league })) : []).filter(f => (f.state === "in" || f.state === "pre") && coverage[f.league]?.approved && (!broadcastRules.ukPremierLeagueSaturdayBlackout || f.league !== "eng.1" || !inUkSaturdayClosedPeriod(f.date))).sort((a, b) => {
-    const byKickoff = new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime();
-    if (byKickoff) return byKickoff;
-    const byCompetition = (LEAGUE_HIERARCHY[a.league] ?? 999) - (LEAGUE_HIERARCHY[b.league] ?? 999);
-    return byCompetition || a.name.localeCompare(b.name);
-  });
-  return { provider: "ESPN", fetchedAt: Date.now(), fixtures, leagueCoverage: coverage, broadcastRules };
+  const now = Date.now();
+  const start = new Date(now - 21 * 86400000).toISOString().slice(0, 10).replaceAll("-", "");
+  const end = new Date(now + 7 * 86400000).toISOString().slice(0, 10).replaceAll("-", "");
+  const programmes = await Promise.allSettled(SUPPORTED_COMPETITIONS.map(async config => ({
+    sport: config.sport,
+    league: config.league,
+    events: (await readJson(`${siteBase(config.sport)}/${leaguePath(config.league)}/scoreboard?dates=${start}-${end}`)).events || []
+  })));
+  const coverageResults = await Promise.all(programmes.map(result => result.status === "fulfilled"
+    ? validateLeague(result.value.sport, result.value.league, result.value.events)
+    : ({ sport: "unknown", league: "unknown", approved: false, checkedAt: Date.now(), sampleSize: 0, matchesWithData: 0, averageEvents: 0, coverage: {}, reason: result.reason?.message || "programme pull failed" })));
+  const coverage = Object.fromEntries(coverageResults.map(result => [`${result.sport}:${result.league}`, result]));
+  const horizon = now + 2 * 60 * 60 * 1000;
+  const fixtures = programmes.flatMap(result => result.status === "fulfilled"
+    ? result.value.events.map(item => {
+        const config = competitionConfig(result.value.sport, result.value.league);
+        return { ...fixture(item), sport: config.sport, league: config.league, competition: config.name };
+      })
+    : []).filter(f => {
+      const kickoff = new Date(f.date || 0).getTime();
+      const isLive = f.state === "in";
+      const isUpcoming = f.state === "pre" && Number.isFinite(kickoff) && kickoff >= now && kickoff <= horizon;
+      const coverageKey = `${f.sport}:${f.league}`;
+      return (isLive || isUpcoming) && coverage[coverageKey]?.approved
+        && (!broadcastRules.ukPremierLeagueSaturdayBlackout || f.league !== "eng.1" || !inUkSaturdayClosedPeriod(f.date));
+    }).sort((a, b) => {
+      const byKickoff = new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime();
+      if (byKickoff) return byKickoff;
+      const byCompetition = (LEAGUE_HIERARCHY[a.league] ?? 999) - (LEAGUE_HIERARCHY[b.league] ?? 999);
+      return byCompetition || a.name.localeCompare(b.name);
+    });
+  return { provider: "ESPN", fetchedAt: now, fixtures, leagueCoverage: coverage, broadcastRules, windowMinutes: 120 };
 }
 async function refreshFixtureIndex(env) {
   const id = env.FIXTURE_INDEX.idFromName("supported-fixtures");
@@ -248,7 +290,7 @@ export class MatchRoom {
         const input = await request.json();
         if (input.fixture) {
           this.room.fixture = input.fixture;
-          this.room.provider = { name: "ESPN", league: input.league || "eng.1", eventId: input.fixture.id, error: null };
+          this.room.provider = { name: "ESPN", sport: input.sport || input.fixture.sport || "soccer", league: input.league || "eng.1", eventId: input.fixture.id, error: null };
           this.room.timeline = (input.events || []).filter(e => e && e.offset != null).map(e => ({ id: String(e.id), type: e.type, offset: Number(e.offset), minute: e.minute, text: e.text, team: e.team || null })); this.room.mode = input.mode === "simulation" ? "simulation" : "live"; this.room.speed = Math.max(1, Math.min(50, Number(input.speed) || 1)); this.room.session.mode = this.room.mode; this.room.session.speed = this.room.speed; this.room.session.manualPaused = false; this.room.preMatch = this.buildPreMatch();
           this.room.session.status = this.room.fixture.state === "in" ? "lobby" : "lobby";
         }
@@ -286,13 +328,13 @@ export class MatchRoom {
   }
   async refreshLive() {
     if (!this.room.fixture?.id || this.room.mode !== "live") return;
-    const league = this.room.provider?.league || "eng.1", id = this.room.provider.eventId;
+    const league = this.room.provider?.league || "eng.1", config = competitionConfig(this.room.provider?.sport, league), sport = config.sport, id = this.room.provider.eventId;
     try {
-      const data = await readJson(`${ESPN_SITE}/${leaguePath(league)}/summary?event=${encodeURIComponent(id)}`);
+      const data = await readJson(`${siteBase(sport)}/${leaguePath(league)}/summary?event=${encodeURIComponent(id)}`);
       const competition = data.header?.competitions?.[0] || data.competitions?.[0] || {};
       const nextFixture = fixture({ id, name: competition.shortName || competition.name, date: competition.date, competitions: [{ ...competition, competitors: competition.competitors || [] }], status: competition.status });
       this.room.fixture = { ...this.room.fixture, ...nextFixture, home: { ...this.room.fixture.home, ...nextFixture.home }, away: { ...this.room.fixture.away, ...nextFixture.away } };
-      const coreBase = `${ESPN_CORE}/${leaguePath(league)}/events/${encodeURIComponent(id)}/competitions/${encodeURIComponent(id)}`;
+      const coreBase = `${coreBase(sport, league)}/events/${encodeURIComponent(id)}/competitions/${encodeURIComponent(id)}`;
       const now = Date.now(), paginateCore = !this.room.lastCorePaginationAt || now - this.room.lastCorePaginationAt >= 60000;
       const [core, summary] = await Promise.allSettled([paginateCore ? readCorePlays(coreBase) : readCorePlayPage(coreBase), Promise.resolve(data)]);
       const coreItems = core.status === "fulfilled" ? (core.value.items || []) : [];
