@@ -18,7 +18,7 @@ $("#backSetup").onclick = () => { $("#fixturesModal").classList.add("hidden"); $
 
 $("#setupForm").onsubmit = async (e) => {
   e.preventDefault(); const date = $("#dateInput").value; const league = $("#leagueInput").value.trim();
-  showError($("#setupError"), "Pulling ESPN programme…");
+  showError($("#setupError"), "Pulling fixture programme…");
   try {
     const data = await api(`/api/espn/fixtures?date=${encodeURIComponent(date)}&league=${encodeURIComponent(league)}`);
     state.date = date; state.league = league; state.fixtures = data.fixtures || [];
@@ -30,7 +30,7 @@ $("#setupForm").onsubmit = async (e) => {
 
 function renderFixtures() {
   const target = $("#fixtures");
-  if (!state.fixtures.length) { target.innerHTML = '<div class="empty">ESPN returned no fixtures for this date and competition.</div>'; return; }
+  if (!state.fixtures.length) { target.innerHTML = '<div class="empty">No fixtures were returned for this date and competition.</div>'; return; }
   target.innerHTML = state.fixtures.map(f => `<button class="fixture" data-id="${escapeHtml(f.id)}"><span><strong>${escapeHtml(f.home.name)} v ${escapeHtml(f.away.name)}</strong><small>${escapeHtml(f.status)}${f.venue ? " · " + escapeHtml(f.venue) : ""}</small></span><b>${f.home.score ?? "–"} — ${f.away.score ?? "–"}</b></button>`).join("");
   $$(".fixture").forEach(b => b.onclick = () => selectFixture(b.dataset.id));
 }
@@ -45,7 +45,7 @@ async function selectFixture(id) {
 function renderMatch() {
   const f = state.match.fixture || state.fixture; const events = state.match.events || [];
   $("#matchTitle").textContent = `${f.home.name} v ${f.away.name}`; $("#matchMeta").textContent = `${formatDate(f.date || state.date)} · ${state.league} · ${events.length} timestamped updates`;
-  const sources = state.match.sources || {}; $("#provenance").innerHTML = `<b>PROCESSING PROVENANCE</b><span>ESPN site summary: ${escapeHtml(sources.summary || "not read")}</span><span>ESPN core plays: ${escapeHtml(sources.plays || "not read")}</span><span>Situation: ${sources.situation ? "read" : "unavailable"}</span><span>Normalised events: ${events.length}</span>`;
+  const sources = state.match.sources || {}; $("#provenance").innerHTML = `<b>PROCESSING PROVENANCE</b><span>Fixture summary: ${escapeHtml(sources.summary || "not read")}</span><span>Live event feed: ${escapeHtml(sources.plays || "not read")}</span><span>Situation: ${sources.situation ? "read" : "unavailable"}</span><span>Normalised events: ${events.length}</span>`;
   $("#homeName").textContent = f.home.name; $("#awayName").textContent = f.away.name; $("#homeScore").textContent = f.home.score ?? "–"; $("#awayScore").textContent = f.away.score ?? "–";
   resetReplay();
   const createRoom = $("#createRoom");
