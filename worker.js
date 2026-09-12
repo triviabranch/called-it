@@ -523,9 +523,16 @@ export class MatchRoom {
   }
   async openLiveRound() {
     const scheduledCallAt = Number(this.room.session.nextQuestionAt) || nextLiveCallAt(this.room.fixture);
+    const rounds = [...(this.room.session.rounds || []), this.room.session.round].filter(Boolean);
+    const existing = rounds.find(round => Number(round.scheduledCallAt) === scheduledCallAt);
+    if (existing) {
+      this.room.session.nextQuestionAt = scheduledCallAt + LIVE_CALL_INTERVAL_MS;
+      await this.save(); this.broadcast(); this.schedule(10000);
+      return;
+    }
     const type = this.nextLiveType(), f = this.room.fixture || {};
     if (this.room.session.round?.status === "voting") { this.room.session.rounds ||= []; this.room.session.rounds.push(this.room.session.round); }
-    const round = { id: "round-" + (this.room.session.nextRoundIndex || 0), targetEventId: null, targetType: type, question: "Who gets the next " + type + "?", choices: [{ key: "home", label: f.home?.name || "Home" }, { key: "away", label: f.away?.name || "Away" }], status: "voting", warmupEndsAt: null, voteEndsAt: null, result: null, openedAt: Date.now(), baselineEventIds: this.room.timeline.map(e => e.id) };
+    const round = { id: "round-" + (this.room.session.nextRoundIndex || 0), scheduledCallAt, targetEventId: null, targetType: type, question: "Who gets the next " + type + "?", choices: [{ key: "home", label: f.home?.name || "Home" }, { key: "away", label: f.away?.name || "Away" }], status: "voting", warmupEndsAt: null, voteEndsAt: null, result: null, openedAt: Date.now(), baselineEventIds: this.room.timeline.map(e => e.id) };
     this.room.session.lastQuestionType = type; this.room.session.round = round; this.room.session.nextRoundIndex = (this.room.session.nextRoundIndex || 0) + 1; this.room.session.nextQuestionAt = scheduledCallAt + LIVE_CALL_INTERVAL_MS;
     this.room.events.unshift({ label: "Vote now", detail: round.question }); await this.save(); this.broadcast(); this.schedule(10000);
   }
