@@ -1,4 +1,4 @@
-let ws, roomId, state, playerId, role, submittedRoundId = null, leaderboardOpen = false, finalLeaderboardDismissed = false, callsOpen = false, joinModalOpen = false, joinModalDismissed = false;
+let ws, roomId, state, playerId, role, submittedRoundId = null, leaderboardOpen = false, finalLeaderboardDismissed = false, callsOpen = false, joinModalOpen = false, joinModalDismissed = false, preMatchDismissed = false;
 let lastStructuralRenderKey = "";
 const app = document.querySelector("#app"), query = new URLSearchParams(location.search);
 const directRoom = location.pathname.match(/^\/play\/([^/]+)$/i)?.[1];
@@ -74,9 +74,10 @@ async function joinFixture(fixture, league, name = "") {
 function connect() { ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/room/${roomId}`); ws.onmessage = event => { const message = JSON.parse(event.data); if (message.type === "identity") { playerId = message.playerId; localStorage.setItem(`calledItPlayer:${roomId}`, playerId); } if (message.state) { state = message.state; render(); } }; ws.onclose = () => setTimeout(connect, 1500); }
 function preMatchCard(me) {
   const questions = state.playerPreMatch?.[playerId] || state.preMatch || [], answered = state.playerStatus?.[playerId] || [], current = questions.find(q => !answered.includes(q.id) && !q.settled);
+  if (preMatchDismissed) return "";
   if (!current) return '<div class="pre-complete">Your three calls are in. Stay with the match — the next live question will appear here.</div>';
   const answerUi = current.input ? `<label class="number-call">${esc(current.input.suffix)}<input id="preNumber" type="number" min="${current.input.min}" max="${current.input.max}" step="${current.input.step}" value="${current.input.min}"></label><button class="answer" data-pre-submit="${esc(current.id)}">Submit call</button>` : `<div class="answers">${current.choices.map(a => `<button class="answer" data-pre="${esc(a.key)}">${esc(a.label)}</button>`).join("")}</div>`;
-  return `<div class="pre-modal-backdrop"><div class="pre-modal"><div class="phase">Your pre-match calls · ${answered.length + 1} of ${questions.length}</div><h2>${esc(current.question)}</h2><p class="muted">Make your call before kick-off.</p>${answerUi}</div></div>`;
+  return `<div class="pre-modal-backdrop"><div class="pre-modal"><div class="section-head"><div class="phase">Your pre-match calls · ${answered.length + 1} of ${questions.length}</div><button type="button" class="modal-close" data-pre-close aria-label="Close pre-match calls">×</button></div><h2>${esc(current.question)}</h2><p class="muted">Make your call before kick-off.</p>${answerUi}<button type="button" class="secondary" data-pre-close>Join later</button></div></div>`;
 }
 function simulationPanel() {
   if (role !== "host" || state.mode !== "simulation") return "";
@@ -153,8 +154,9 @@ function committedCallsModal() {
   document.querySelector("[data-player-join-open]")?.addEventListener("click", () => { joinModalOpen = true; joinModalDismissed = false; render(); });
   document.querySelector("[data-player-join-cancel]")?.addEventListener("click", () => { joinModalOpen = false; joinModalDismissed = true; render(); });
   document.querySelector("[data-player-join-confirm]")?.addEventListener("click", () => { const input = document.querySelector("[data-player-join-name]"), name = input?.value.trim(); if (!name) { input?.focus(); return; } localStorage.removeItem(`calledItPendingName:${state.fixture?.id}`); send({type:"join", name, playerId}); });
-  document.querySelectorAll("[data-pre]").forEach(button => button.onclick = () => { const q = (state.preMatch || []).find(item => item.choices.some(a => a.key === button.dataset.pre) && !(state.playerStatus?.[playerId] || []).includes(item.id)); send({type:"prematch", playerId, questionId:q?.id, answer:button.dataset.pre}); });
-  document.querySelectorAll("[data-pre-submit]").forEach(button => button.onclick = () => send({type:"prematch", playerId, questionId:button.dataset.preSubmit, answer:document.querySelector("#preNumber")?.value}));
+  document.querySelectorAll("[data-pre]").forEach(button => button.onclick = () => { const questions = state.playerPreMatch?.[playerId] || state.preMatch || [], answered = state.playerStatus?.[playerId] || [], q = questions.find(item => item.choices?.some(a => a.key === button.dataset.pre) && !answered.includes(item.id) && !item.settled); if (!q) return; send({type:"prematch", playerId, questionId:q.id, answer:button.dataset.pre}); });
+  document.querySelectorAll("[data-pre-submit]").forEach(button => button.onclick = () => { const value = document.querySelector("#preNumber")?.value; if (value === "") return; send({type:"prematch", playerId, questionId:button.dataset.preSubmit, answer:value}); });
+  document.querySelectorAll("[data-pre-close]").forEach(button => button.onclick = () => { preMatchDismissed = true; render(); });
   document.querySelectorAll("[data-answer]").forEach(button => button.onclick = () => { button.disabled = true; submittedRoundId = r?.id || null; send({type:"predict", playerId, roundId:r?.id, answer:button.dataset.answer}); render(); });
   document.querySelectorAll("[data-sim-action]").forEach(button => button.onclick = () => { if (button.dataset.simAction === "start") send({type:"start"}); else send({type:"simulation-control", action:button.dataset.simAction}); });
   document.querySelectorAll("[data-sim-speed]").forEach(button => button.onclick = () => send({type:"simulation-control", action:"speed", speed:Number(button.dataset.simSpeed)}));
