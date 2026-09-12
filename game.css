@@ -63,7 +63,9 @@ h1,h2,.card h2,.match-header h1,.call-modal h2,.leaderboard-modal h2{font-family
 
 /* Committed calls modal */
 .calls-modal-backdrop{position:fixed;inset:0;z-index:25;display:grid;place-items:center;padding:16px;background:rgba(7,24,45,.68);overflow:auto}
-.calls-modal{width:min(760px,100%);max-height:calc(100dvh - 32px);overflow-y:auto;background:var(--paper);color:var(--ink);padding:20px;border:2px solid var(--ink);box-shadow:10px 10px 0 var(--red)}
+.calls-modal{width:min(760px,100%);max-height:calc(100dvh - 32px);min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;background:var(--paper);color:var(--ink);padding:20px;border:2px solid var(--ink);box-shadow:10px 10px 0 var(--red)}
+.calls-modal-backdrop,.leaderboard-modal-backdrop,.call-modal-backdrop,.pre-modal-backdrop,.join-modal-backdrop{overflow-y:auto;-webkit-overflow-scrolling:touch}
+.leaderboard-modal,.call-modal,.pre-modal,.join-modal{max-height:calc(100dvh - 32px);overflow-y:auto;min-height:0;-webkit-overflow-scrolling:touch}
 .calls-modal .section-head{position:sticky;top:-20px;padding-bottom:12px;background:var(--paper);z-index:1}
 .calls-modal .section-head h2{margin:0}
 .calls-player{border-top:1px solid #bdb29d;padding:12px 0}
