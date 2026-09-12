@@ -104,7 +104,7 @@ function committedCallsModal() {
   if (!callsOpen) return "";
   const players = state.committedCalls || [];
   const playerHtml = players.map(player => {
-    const calls = (player.calls || []).map(call => `<div class="call-row"><span class="call-time">${esc(call.matchTime || "—")}</span><span class="call-question">${esc(call.question)}</span><small>${esc(call.answer)}</small><span class="call-status ${String(call.status).toLowerCase()}">${esc(call.status)}</span></div>`).join("");
+    const calls = (player.calls || []).map(call => `<div class="call-row"><span class="call-time">MATCH ${esc(call.matchTime || "—")}</span><span class="call-question">${esc(call.question)}</span><small>${esc(call.answer)}</small><span class="call-status ${String(call.status).toLowerCase()}">${esc(call.status)}</span></div>`).join("");
     return `<div class="calls-player"><div class="calls-player-head"><b>${esc(player.name)}</b><small>${player.points || 0} pts · ${player.calls?.length || 0} calls</small></div>${calls || "<p class=\"muted\">No calls committed yet.</p>"}</div>`;
   }).join("");
   return `<div class="calls-modal-backdrop" data-calls-close><section class="calls-modal" role="dialog" aria-modal="true" aria-label="Committed calls"><div class="section-head"><h2>Committed calls</h2><button class="modal-close" data-calls-close aria-label="Close committed calls">×</button></div><p class="muted">Everyone in this fixture, and the calls already on the board.</p>${playerHtml || "<p class=\"muted\">No players have joined yet.</p>"}</section></div>`;
