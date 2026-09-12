@@ -249,6 +249,7 @@ export default {
     }
     if (url.pathname === "/admin" || url.pathname === "/admin/") return env.ASSETS.fetch(new Request(new URL("/admin.html", request.url), request));
     if (url.pathname === "/api/admin/refresh-fixtures" && request.method === "POST") return refreshFixtureIndex(env);
+    if (url.pathname === "/api/admin/live-rooms" && request.method === "GET") { const id = env.FIXTURE_INDEX.idFromName("supported-fixtures"); return env.FIXTURE_INDEX.get(id).fetch(new Request("https://fixture-index/live-rooms")); }
     if (url.pathname === "/api/admin/fixture-config" && (request.method === "GET" || request.method === "POST")) { const id = env.FIXTURE_INDEX.idFromName("supported-fixtures"); return env.FIXTURE_INDEX.get(id).fetch(new Request(`https://fixture-index/config`, { method: request.method, body: request.method === "POST" ? await request.text() : undefined, headers: request.method === "POST" ? { "content-type": "application/json" } : undefined })); }
     if (url.pathname === "/api/live-fixtures") return liveFixtures(env);
     if (url.pathname.startsWith("/api/espn/")) { const response = await espnApi(url); if (response) return response; }
@@ -307,6 +308,27 @@ export class FixtureIndex {
         return json({ removed: data.fixtures.length !== before });
       } catch (error) { return json({ error: error.message || "Could not remove fixture" }, 400); }
     }
+    if (request.method === "POST" && new URL(request.url).pathname === "/register-room") {
+      try {
+        const input = await request.json();
+        if (!input.roomId) return json({ error: "roomId is required" }, 400);
+        const rooms = await this.state.storage.get("liveRooms") || {};
+        rooms[String(input.roomId)] = input;
+        await this.state.storage.put("liveRooms", rooms);
+        return json({ saved: true });
+      } catch (error) { return json({ error: error.message || "Could not register live room" }, 400); }
+    }
+    if (request.method === "POST" && new URL(request.url).pathname === "/remove-room") {
+      try {
+        const input = await request.json(), rooms = await this.state.storage.get("liveRooms") || {};
+        delete rooms[String(input.roomId)]; await this.state.storage.put("liveRooms", rooms); return json({ removed: true });
+      } catch (error) { return json({ error: error.message || "Could not remove live room" }, 400); }
+    }
+    if (request.method === "GET" && new URL(request.url).pathname === "/live-rooms") {
+      const rooms = await this.state.storage.get("liveRooms") || {}, cutoff = Date.now() - 6 * 60 * 60 * 1000;
+      const live = Object.values(rooms).filter(room => Number(room.updatedAt || 0) >= cutoff && room.fixture?.state === "in" && room.session?.status !== "complete");
+      return json({ rooms: live.sort((a, b) => String(a.fixture?.name || "").localeCompare(String(b.fixture?.name || ""))) });
+    }
     const data = await this.state.storage.get("index");
     return data ? json(data) : json({ error: "Fixture index has not been refreshed yet" }, 404);
   }
@@ -343,7 +365,15 @@ export class MatchRoom {
       events: [{ label: "Fixture room opened", detail: "Live data from ESPN" }], lastProviderEventIds: [], lastLivePollAt: 0
     };
   }
-  async save() { this.room.lastActivity = Date.now(); await this.state.storage.put("room", this.room); await this.state.storage.setAlarm(Date.now() + 7200000); }
+  async save() { this.room.lastActivity = Date.now(); await this.state.storage.put("room", this.room); await this.state.storage.setAlarm(Date.now() + 7200000); await this.syncAdminRoom(); }
+  async syncAdminRoom(force = false) {
+    if (!this.room?.fixture?.id || !this.env?.FIXTURE_INDEX || (!force && Date.now() - (this.adminSyncAt || 0) < 10000)) return;
+    this.adminSyncAt = Date.now();
+    const rounds = [...(this.room.session?.rounds || []), this.room.session?.round].filter(Boolean).map(round => ({ id: round.id, type: round.targetType, question: round.question, status: round.status, result: round.result || null, openedAt: round.openedAt || null, voteEndsAt: round.voteEndsAt || null }));
+    const summary = { roomId: this.state.id.toString(), updatedAt: this.adminSyncAt, fixture: this.room.fixture, session: { status: this.room.session?.status, clock: this.room.session?.clock || 0, clockDisplay: this.room.session?.clockDisplay || null, nextQuestionAt: this.room.session?.nextQuestionAt || null }, playerCount: this.room.players?.length || 0, players: (this.room.players || []).map(player => ({ name: player.name, points: player.points || 0, calls: player.calls || player.rounds || 0, correct: player.correct || 0 })), calls: rounds, provider: { lastLivePollAt: this.room.lastLivePollAt || 0, error: this.room.provider?.error || null } };
+    try { const id = this.env.FIXTURE_INDEX.idFromName("supported-fixtures"); await this.env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/register-room", { method: "POST", body: JSON.stringify(summary), headers: { "content-type": "application/json" } }); } catch {}
+  }
+  async removeAdminRoom() { if (!this.env?.FIXTURE_INDEX) return; try { const id = this.env.FIXTURE_INDEX.idFromName("supported-fixtures"); await this.env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/remove-room", { method: "POST", body: JSON.stringify({ roomId: this.state.id.toString() }), headers: { "content-type": "application/json" } }); } catch {} }
   public() { if (this.room.fixture?.id && !this.room.preMatch?.length) this.room.preMatch = this.buildPreMatch(); return { ...this.room, predictions: undefined, playerStatus: Object.fromEntries(this.room.players.map(p => [p.id, Object.keys(this.room.predictions[p.id]?.pre || {})])) }; }
   broadcast() { this.sockets = new Set(this.state.getWebSockets ? this.state.getWebSockets() : this.sockets); const m = JSON.stringify({ type: "state", state: this.public() }); for (const ws of this.sockets) { try { ws.send(m); } catch {} } }
   schedule(ms) { this.state.storage.setAlarm(Date.now() + Math.max(250, Math.min(ms, 7200000))); }
@@ -403,7 +433,7 @@ export class MatchRoom {
     const status = fixtureData.status || {};
     const detail = String(status.shortDetail || status.detail || "");
     const rawClock = String(summary?.header?.competitions?.[0]?.status?.displayClock || "").trim();
-    const stoppage = rawClock.match(/^(\d+)\s*\+\s*(\d+)$/) || detail.match(/^(\d+)\s*['’]?\s*\+\s*(\d+)/);
+    const stoppage = rawClock.match(/^(\d+)\s*(?:\+|:)\s*(\d+)$/) || detail.match(/^(\d+)\s*['’]?\s*\+\s*(\d+)/);
     if (stoppage) return { seconds: (Number(stoppage[1]) + Number(stoppage[2])) * 60, display: `${Number(stoppage[1])}+${Number(stoppage[2])}` };
     const clockText = rawClock.replace(/[^0-9.]/g, "");
     const minute = Number(clockText);
@@ -464,7 +494,7 @@ export class MatchRoom {
       const openRounds = [...(s.rounds || []), s.round].filter(round => round?.status === "voting");
       const resolvedRound = openRounds.find(round => this.room.timeline.some(e => !(round.baselineEventIds || []).includes(e.id) && e.type === round.targetType) || this.room.fixture.state === "post");
       if (resolvedRound) { await this.settleLiveRound(resolvedRound); return; }
-      if (s.status === "running" && this.room.fixture.state === "post") { s.status = "complete"; await removeFixtureFromIndex(this.env, this.room.fixture.id); await this.save(); await this.state.storage.deleteAlarm(); this.broadcast(); return; }
+      if (s.status === "running" && this.room.fixture.state === "post") { s.status = "complete"; await removeFixtureFromIndex(this.env, this.room.fixture.id); await this.removeAdminRoom(); await this.save(); await this.state.storage.deleteAlarm(); this.broadcast(); return; }
       await this.save(); this.broadcast(); this.schedule(15000); return;
     }
     if (!r) return;
@@ -516,5 +546,5 @@ export class MatchRoom {
   async closeRoom(ws) { this.sockets = new Set(this.state.getWebSockets ? this.state.getWebSockets() : this.sockets); this.sockets.delete(ws); if (this.sockets.size === 0) { if (this.room) await this.state.storage.put("room", this.room); this.schedule(30000); } }
   async webSocketClose(ws) { await this.closeRoom(ws); }
   async webSocketError(ws) { await this.closeRoom(ws); }
-  async alarm() { this.sockets = new Set(this.state.getWebSockets ? this.state.getWebSockets() : this.sockets); if (this.sockets.size === 0) { if (this.room) { await this.state.storage.delete("room"); this.room = null; } await this.state.storage.deleteAlarm(); } else { await this.load(); await this.advance(); } }
+  async alarm() { this.sockets = new Set(this.state.getWebSockets ? this.state.getWebSockets() : this.sockets); if (this.sockets.size === 0) { if (this.room) await this.removeAdminRoom(); if (this.room) { await this.state.storage.delete("room"); this.room = null; } await this.state.storage.deleteAlarm(); } else { await this.load(); await this.advance(); } }
 }
