@@ -474,30 +474,24 @@ export class MatchRoom {
   }
   liveClock(fixtureData, summary) {
     const status = fixtureData.status || {};
-    const detail = String(status.shortDetail || status.detail || "");
-    const rawClock = String(summary?.header?.competitions?.[0]?.status?.displayClock || "").trim();
-    const stoppage = rawClock.match(/^(\d+)\s*\+\s*(\d+)$/) || detail.match(/^(\d+)\s*['’]?\s*\+\s*(\d+)/);
+    const detail = String(status.shortDetail || status.detail || "").trim();
+    const rawClock = String(summary?.header?.competitions?.[0]?.status?.displayClock || status.displayClock || "").trim();
+    const stoppage = rawClock.match(/(?:^|\s)(\d+)\s*\+\s*(\d+)(?:\s|$)/) || detail.match(/(?:^|\s)(\d+)\s*['’]?\s*\+\s*(\d+)(?:\s|$)/);
     if (stoppage) {
       const minutes = Number(stoppage[1]), extra = Number(stoppage[2]);
-      return { seconds: (minutes + extra) * 60, display: `${minutes}+${extra}` };
+      return { seconds: (minutes + extra) * 60, display: \`${minutes}+${extra}\` };
     }
-    const normalClock = rawClock.match(/^(\d+)\s*:\s*(\d{1,2})$/);
+    const normalClock = rawClock.match(/(?:^|\s)(\d+)\s*:\s*(\d{1,2})(?:\s|$)/) || detail.match(/(?:^|\s)(\d+)\s*:\s*(\d{1,2})(?:\s|$)/);
     if (normalClock) {
       const minutes = Number(normalClock[1]), seconds = Number(normalClock[2]);
-      return { seconds: minutes * 60 + seconds, display: `${minutes}:${String(seconds).padStart(2, "0")}` };
+      return { seconds: minutes * 60 + seconds, display: \`${minutes}:\${String(seconds).padStart(2, "0")}\` };
     }
-    if (/^\d{3,4}$/.test(rawClock)) {
-      const extraDigits = rawClock.length === 4 ? 2 : 1;
-      const minutes = Number(rawClock.slice(0, -extraDigits)), extra = Number(rawClock.slice(-extraDigits));
-      return { seconds: (minutes + extra) * 60, display: `${minutes}+${extra}` };
-    }
-    const minuteOnly = rawClock.match(/^(\d+)$/);
+    const minuteOnly = rawClock.match(/^(\d{1,3})\s*['’]?$/) || detail.match(/(?:^|\s)(\d{1,3})\s*['’](?:\s|$)/);
     if (minuteOnly) {
       const minutes = Number(minuteOnly[1]);
       return { seconds: minutes * 60, display: null };
     }
-    const detailClock = detail.match(/(\d+)\s*['’]/);
-    return { seconds: detailClock ? Number(detailClock[1]) * 60 : this.room.session.clock || 0, display: null };
+    return { seconds: this.room.session.clock || 0, display: null };
   }
   nextLiveType() {
     const types = ["corner", "card", "goal", "foul"];
@@ -555,7 +549,7 @@ export class MatchRoom {
     if (s.mode === "live") {
       await this.refreshLive();
       this.settlePreMatch(s.clock);
-      if (s.status === "running" && this.room.fixture.state === "in" && Date.now() >= (s.nextQuestionAt || 0)) { await this.openLiveRound(); return; }
+      const fixtureState = String(this.room.fixture?.state || "").toLowerCase(), hasLiveTimeline = this.room.timeline.some(event => event.offset != null); const fixtureIsLive = fixtureState === "in" || (fixtureState !== "post" && hasLiveTimeline); if (s.status === "running" && fixtureIsLive && (!s.round || s.round.status === "settled") && Date.now() >= (s.nextQuestionAt || 0)) { await this.openLiveRound(); return; }
       const openRounds = [...(s.rounds || []), s.round].filter(round => round?.status === "voting");
       const resolvedRound = openRounds.find(round => this.room.timeline.some(e => !(round.baselineEventIds || []).includes(e.id) && e.type === round.targetType) || this.room.fixture.state === "post");
       if (resolvedRound) { await this.settleLiveRound(resolvedRound); return; }
