@@ -30,6 +30,7 @@ function siteBase(sport) { return `${ESPN_SITE_ROOT}/${encodeURIComponent(sport)
 function coreBase(sport, league) { return `${ESPN_CORE_ROOT}/${encodeURIComponent(sport)}/leagues/${leaguePath(league)}`; }
 const DEFAULT_BROADCAST_RULES = { ukPremierLeagueSaturdayBlackout: true };
 const LIVE_CALL_INTERVAL_MS = 7.5 * 60 * 1000;
+const LIVE_PROVIDER_POLL_MS = 15 * 1000;
 function nextLiveCallAt(fixture, now = Date.now()) {
   const kickoff = Date.parse(fixture?.date);
   if (!Number.isFinite(kickoff)) return now + LIVE_CALL_INTERVAL_MS;
@@ -447,7 +448,7 @@ export class MatchRoom {
     try {
       const data = await readJson(`${siteBase(sport)}/${leaguePath(league)}/summary?event=${encodeURIComponent(id)}`);
       const competition = data.header?.competitions?.[0] || data.competitions?.[0] || {};
-      const nextFixture = fixture({ id, name: competition.shortName || competition.name, date: competition.date, competitions: [{ ...competition, competitors: competition.competitors || [] }], status: competition.status });
+      const nextFixture = fixture({ id, name: competition.shortName || competition.name, date: competition.date || this.room.fixture.date, competitions: [{ ...competition, competitors: competition.competitors || [] }], status: competition.status });
       this.room.fixture = { ...this.room.fixture, ...nextFixture, home: { ...this.room.fixture.home, ...nextFixture.home }, away: { ...this.room.fixture.away, ...nextFixture.away } };
       const coreUrl = `${coreBase(sport, league)}/events/${encodeURIComponent(id)}/competitions/${encodeURIComponent(id)}`;
       const now = Date.now(), paginateCore = !this.room.lastCorePaginationAt || now - this.room.lastCorePaginationAt >= 60000;
@@ -572,7 +573,7 @@ export class MatchRoom {
       const resolvedRound = openRounds.find(round => this.room.timeline.some(e => !(round.baselineEventIds || []).includes(e.id) && e.type === round.targetType) || this.room.fixture.state === "post");
       if (resolvedRound) { await this.settleLiveRound(resolvedRound); return; }
       if (s.status === "running" && this.room.fixture.state === "post") { s.status = "complete"; await removeFixtureFromIndex(this.env, this.room.fixture.id); await this.removeAdminRoom(); await this.save(); await this.state.storage.deleteAlarm(); this.broadcast(); return; }
-      await this.save(); this.broadcast(); this.schedule(Math.max(250, (s.nextQuestionAt || Date.now() + 15000) - Date.now())); return;
+      await this.save(); this.broadcast(); this.schedule(Math.min(LIVE_PROVIDER_POLL_MS, Math.max(250, (s.nextQuestionAt || Date.now() + LIVE_PROVIDER_POLL_MS) - Date.now()))); return;
     }
     if (!r) return;
     if (s.manualPaused) return;
@@ -602,7 +603,7 @@ export class MatchRoom {
     const correct = target ? this.keyForQuestion({ type: "first-goal-team" }, target) : null;
     round.result = { correct, event: target?.text || `No ${round.targetType} recorded during the call`, eventId: target?.id || null }; round.status = "settled";
     for (const p of this.room.players) { const answer = this.room.predictions[p.id]?.[round.id]; if (answer) p.calls = (p.calls || 0) + 1; if (correct && answer === correct) { p.points = (p.points || 0) + 100; p.correct = (p.correct || 0) + 1; } if (answer) p.rounds = (p.rounds || 0) + 1; }
-    this.rebuildLeaderboard(); this.room.events.unshift({ label: "Prediction settled", detail: round.result.event }); await this.save(); this.broadcast(); this.schedule(Math.max(250, (this.room.session.nextQuestionAt || Date.now() + 15000) - Date.now()));
+    this.rebuildLeaderboard(); this.room.events.unshift({ label: "Prediction settled", detail: round.result.event }); await this.save(); this.broadcast(); this.schedule(Math.min(LIVE_PROVIDER_POLL_MS, Math.max(250, (this.room.session.nextQuestionAt || Date.now() + LIVE_PROVIDER_POLL_MS) - Date.now())));
   }
   async webSocketMessage(ws, raw) {
     let m; try { m = JSON.parse(raw); } catch { return; } if (!this.room) await this.load(); this.room.lastActivity = Date.now();
