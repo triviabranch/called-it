@@ -550,7 +550,7 @@ export class MatchRoom {
       const resolvedRound = openRounds.find(round => this.room.timeline.some(e => !(round.baselineEventIds || []).includes(e.id) && e.type === round.targetType) || this.room.fixture.state === "post");
       if (resolvedRound) { await this.settleLiveRound(resolvedRound); return; }
       if (s.status === "running" && this.room.fixture.state === "post") { s.status = "complete"; await removeFixtureFromIndex(this.env, this.room.fixture.id); await this.removeAdminRoom(); await this.save(); await this.state.storage.deleteAlarm(); this.broadcast(); return; }
-      await this.save(); this.broadcast(); this.schedule(15000); return;
+      await this.save(); this.broadcast(); this.schedule(Math.max(250, (s.nextQuestionAt || Date.now() + 15000) - Date.now())); return;
     }
     if (!r) return;
     if (s.manualPaused) return;
@@ -580,7 +580,7 @@ export class MatchRoom {
     const correct = target ? this.keyForQuestion({ type: "first-goal-team" }, target) : null;
     round.result = { correct, event: target?.text || `No ${round.targetType} recorded during the call`, eventId: target?.id || null }; round.status = "settled";
     for (const p of this.room.players) { const answer = this.room.predictions[p.id]?.[round.id]; if (answer) p.calls = (p.calls || 0) + 1; if (correct && answer === correct) { p.points = (p.points || 0) + 100; p.correct = (p.correct || 0) + 1; } if (answer) p.rounds = (p.rounds || 0) + 1; }
-    this.rebuildLeaderboard(); this.room.session.nextQuestionAt = nextLiveCallAt(); this.room.events.unshift({ label: "Prediction settled", detail: round.result.event }); await this.save(); this.broadcast(); this.schedule(15000);
+    this.rebuildLeaderboard(); this.room.session.nextQuestionAt = nextLiveCallAt(); this.room.events.unshift({ label: "Prediction settled", detail: round.result.event }); await this.save(); this.broadcast(); this.schedule(Math.max(250, (this.room.session.nextQuestionAt || Date.now() + 15000) - Date.now()));
   }
   async webSocketMessage(ws, raw) {
     let m; try { m = JSON.parse(raw); } catch { return; } if (!this.room) await this.load(); this.room.lastActivity = Date.now();
