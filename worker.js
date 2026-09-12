@@ -460,7 +460,7 @@ export class MatchRoom {
     if (s.mode === "live") {
       await this.refreshLive();
       this.settlePreMatch(s.clock);
-      if (s.status === "running" && (!s.round || s.round.status === "settled") && this.room.fixture.state === "in" && Date.now() >= (s.nextQuestionAt || 0)) { await this.openLiveRound(); return; }
+      if (s.status === "running" && this.room.fixture.state === "in" && Date.now() >= (s.nextQuestionAt || 0)) { await this.openLiveRound(); return; }
       const openRounds = [...(s.rounds || []), s.round].filter(round => round?.status === "voting");
       const resolvedRound = openRounds.find(round => this.room.timeline.some(e => !(round.baselineEventIds || []).includes(e.id) && e.type === round.targetType) || this.room.fixture.state === "post");
       if (resolvedRound) { await this.settleLiveRound(resolvedRound); return; }
