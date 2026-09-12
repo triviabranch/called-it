@@ -404,7 +404,8 @@ export class MatchRoom {
       }
       return { id: player.id, name: player.name, calls, points: player.points || 0, correct: player.correct || 0 };
     });
-    return { ...this.room, predictions: undefined, playerStatus: Object.fromEntries(this.room.players.map(p => [p.id, Object.keys(this.room.predictions[p.id]?.pre || {})])), committedCalls };
+    const settledEventIds = [...(this.room.preMatch || []), ...rounds].map(item => item.result?.eventId).filter(Boolean).map(String);
+    return { ...this.room, predictions: undefined, playerStatus: Object.fromEntries(this.room.players.map(p => [p.id, Object.keys(this.room.predictions[p.id]?.pre || {})])), committedCalls, settledEventIds };
   }
   broadcast() { this.sockets = new Set(this.state.getWebSockets ? this.state.getWebSockets() : this.sockets); const m = JSON.stringify({ type: "state", state: this.public() }); for (const ws of this.sockets) { try { ws.send(m); } catch {} } }
   schedule(ms) { this.state.storage.setAlarm(Date.now() + Math.max(250, Math.min(ms, 7200000))); }
@@ -495,7 +496,7 @@ export class MatchRoom {
     for (const q of this.room.preMatch || []) {
       if (q.settled) continue; const target = this.targetForQuestion(q);
       if (!target || target.offset > clock) continue;
-      const correct = this.keyForQuestion(q, target); q.settled = true; q.result = { correct, event: target.text || "Event occurred" }; changed = true;
+      const correct = this.keyForQuestion(q, target); q.settled = true; q.result = { correct, event: target.text || "Event occurred", eventId: target.id }; changed = true;
       for (const p of this.room.players) { const answer = this.room.predictions[p.id]?.pre?.[q.id]; if (answer) p.calls = Math.max(p.calls || 0, Object.keys(this.room.predictions[p.id]?.pre || {}).length); if (correct && answer === correct) { p.points = (p.points || 0) + 100; p.correct = (p.correct || 0) + 1; } }
     }
     if (changed) this.rebuildLeaderboard(); return changed;
@@ -540,7 +541,7 @@ export class MatchRoom {
   }
   async settleRound(round) {
     const target = this.room.timeline.find(e => e.id === round.targetEventId); const correct = target?.team && this.room.fixture ? (target.team === this.room.fixture.home.name ? "home" : target.team === this.room.fixture.away.name ? "away" : null) : null;
-    round.result = { correct, event: target?.text || "Event occurred" }; round.status = "settled";
+    round.result = { correct, event: target?.text || "Event occurred", eventId: target?.id || null }; round.status = "settled";
     for (const p of this.room.players) {
       const answer = this.room.predictions[p.id]?.[round.id]; const hit = correct && answer === correct;
       if (hit) p.points = (p.points || 0) + 100;
@@ -554,7 +555,7 @@ export class MatchRoom {
   async settleLiveRound(round) {
     const baseline = new Set(round.baselineEventIds || []), target = this.room.timeline.find(e => !baseline.has(e.id) && e.type === round.targetType);
     const correct = target?.team && this.room.fixture ? (target.team === this.room.fixture.home.name ? "home" : target.team === this.room.fixture.away.name ? "away" : null) : null;
-    round.result = { correct, event: target?.text || `No ${round.targetType} recorded during the call` }; round.status = "settled";
+    round.result = { correct, event: target?.text || `No ${round.targetType} recorded during the call`, eventId: target?.id || null }; round.status = "settled";
     for (const p of this.room.players) { const answer = this.room.predictions[p.id]?.[round.id]; if (answer) p.calls = (p.calls || 0) + 1; if (correct && answer === correct) { p.points = (p.points || 0) + 100; p.correct = (p.correct || 0) + 1; } if (answer) p.rounds = (p.rounds || 0) + 1; }
     this.rebuildLeaderboard(); this.room.events.unshift({ label: "Prediction settled", detail: round.result.event }); await this.save(); this.broadcast(); this.schedule(15000);
   }
