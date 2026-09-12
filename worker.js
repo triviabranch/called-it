@@ -167,6 +167,15 @@ function inUkSaturdayClosedPeriod(value) {
   return parts.weekday === "Sat" && minutes >= 14 * 60 + 45 && minutes < 17 * 60 + 15;
 }
 
+async function scoreboardEvents(sport, league, start, end) {
+  try {
+    return (await readJson(`${siteBase(sport)}/${leaguePath(league)}/scoreboard?dates=${start}-${end}`)).events || [];
+  } catch {
+    const dates = [...new Set([start, end, new Date().toISOString().slice(0, 10).replaceAll("-", "")])];
+    const results = await Promise.all(dates.map(date => readJson(`${siteBase(sport)}/${leaguePath(league)}/scoreboard?dates=${date}`)));
+    return results.flatMap(result => result.events || []);
+  }
+}
 async function pullFixtures(broadcastRules = DEFAULT_BROADCAST_RULES, enabledCompetitions = DEFAULT_ENABLED_COMPETITIONS) {
   const now = Date.now();
   const enabled = new Set(normaliseEnabledCompetitions(enabledCompetitions));
@@ -175,7 +184,7 @@ async function pullFixtures(broadcastRules = DEFAULT_BROADCAST_RULES, enabledCom
   const programmes = await Promise.allSettled(SUPPORTED_COMPETITIONS.filter(config => enabled.has(`${config.sport}:${config.league}`)).map(async config => ({
     sport: config.sport,
     league: config.league,
-    events: (await readJson(`${siteBase(config.sport)}/${leaguePath(config.league)}/scoreboard?dates=${start}-${end}`)).events || []
+    events: await scoreboardEvents(config.sport, config.league, start, end)
   })));
   const coverageResults = await Promise.all(programmes.map(result => result.status === "fulfilled"
     ? validateLeague(result.value.sport, result.value.league, result.value.events)
