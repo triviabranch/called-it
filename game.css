@@ -9,10 +9,11 @@
   main{padding:12px 16px 10px}
   .eyebrow-row{margin-top:18px;gap:8px}
   .leaderboard-trigger{padding:6px 9px}
-  .match-header{padding:15px 16px;margin:12px 0 10px}
+  .match-header{padding:15px 16px;margin:12px 0 0}
   .match-header h1{margin:11px 0 14px}
   .match-header p{margin-top:9px}
-  .player-stats{margin-bottom:10px}
+  .player-stats{margin-bottom:0}
+  .broadcast-feed{margin-top:0}
   .broadcast-feed-list{max-height:30vh}
   .broadcast-event{grid-template-columns:42px 1fr;gap:8px;padding:10px 12px;font-size:12px}
   .broadcast-event .event-minute{font-size:12px}
