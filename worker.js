@@ -438,14 +438,21 @@ export class MatchRoom {
     };
     const committedCalls = this.room.players.map(player => {
       const predictions = this.room.predictions[player.id] || {}, calls = [];
+      const added = new Set();
+      const addCall = (id, question, answer, status, matchTime) => {
+        if (answer == null || added.has(String(id))) return;
+        added.add(String(id)); calls.push({ id, question, answer: answerLabel(question, answer), status: statusFor(question, answer) || status || "Committed", matchTime });
+      };
       for (const question of [...(this.room.preMatch || []), ...(this.room.playerPreMatch?.[player.id] || [])]) {
         const answer = predictions.pre?.[question.id];
-        if (answer != null) calls.push({ id: question.id, question: question.question, answer: answerLabel(question, answer), status: statusFor(question, answer), matchTime: "BEFORE KICK-OFF" });
+        addCall(question.id, question, answer, "Committed", "BEFORE KICK-OFF");
       }
       for (const round of rounds) {
         const answer = predictions[round.id];
-        if (answer != null) calls.push({ id: round.id, question: round.question, answer: answerLabel(round, answer), status: statusFor(round, answer), matchTime: round.presentedMatchTime || formatMatchTime(round.presentedAtClock, round.presentedAtClockDisplay) });
+        addCall(round.id, round, answer, "Committed", round.presentedMatchTime || formatMatchTime(round.presentedAtClock, round.presentedAtClockDisplay));
       }
+      for (const [id, answer] of Object.entries(predictions.pre || {})) addCall(id, { question: "Pre-match call" }, answer, "Committed", "BEFORE KICK-OFF");
+      for (const [id, answer] of Object.entries(predictions)) if (id !== "pre") addCall(id, { question: "Match call" }, answer, "Committed", "IN PLAY");
       return { id: player.id, name: player.name, calls, points: player.points || 0, correct: player.correct || 0 };
     });
     const settledEventIds = [...(this.room.preMatch || []), ...rounds].map(item => item.result?.eventId).filter(Boolean).map(String);
