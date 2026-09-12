@@ -147,21 +147,19 @@ async function validateLeague(sport, league, programme) {
     const matches = programme.filter(event => event.status?.type?.state === "post").slice(-3);
     const rows = await Promise.all(matches.map(async match => {
       try {
-        const base = `${coreBase(sport, league)}/events/${encodeURIComponent(match.id)}/competitions/${encodeURIComponent(match.id)}`;
-        const plays = await readJson(`${base}/plays?limit=300&page=1`);
-        const events = (plays.items || []).map((item, index) => normaliseEvent(item, index, "coverage-core")).filter(event => event.type !== "other" && event.offset != null);
+        const config = competitionConfig(sport, league);
+        const summary = await readJson(`${siteBase(config.sport)}/${leaguePath(config.league)}/summary?event=${encodeURIComponent(match.id)}`);
+        const plays = summary.plays || [];
+        const events = plays.map((item, index) => normaliseEvent(item, index, "coverage-summary")).filter(event => event.type !== "other" && event.offset != null);
         return { id: String(match.id), events: events.length, types: [...new Set(events.map(event => event.type))] };
       } catch { return { id: String(match.id), events: 0, types: [] }; }
     }));
     const has = type => rows.filter(row => row.types.includes(type)).length, sampleSize = rows.length;
     const averageEvents = sampleSize ? Math.round(rows.reduce((sum, row) => sum + row.events, 0) / sampleSize) : 0;
-    const approved = sport === "soccer"
-      ? sampleSize >= 3 && averageEvents >= 6 && has("corner") / sampleSize >= 2 / 3 && has("foul") / sampleSize >= 2 / 3 && has("card") / sampleSize >= 1 / 3
-      : sampleSize >= 1 && averageEvents >= 1;
-    return { sport, league, approved, checkedAt: Date.now(), sampleSize, matchesWithData: rows.filter(row => row.events > 0).length, averageEvents, coverage: { corner: has("corner"), foul: has("foul"), card: has("card"), goal: has("goal"), substitution: has("substitution"), shot: has("shot") }, reason: approved ? "sufficient timestamped event coverage" : "insufficient repeatable in-play event coverage" };
+    const approved = sampleSize >= 1 && averageEvents >= 1;
+    return { sport, league, approved, checkedAt: Date.now(), sampleSize, matchesWithData: rows.filter(row => row.events > 0).length, averageEvents, coverage: { corner: has("corner"), foul: has("foul"), card: has("card"), goal: has("goal"), substitution: has("substitution"), shot: has("shot") }, reason: approved ? "summary feed has timestamped event coverage" : "no timestamped event coverage returned by ESPN" };
   } catch (error) { return { sport, league, approved: false, checkedAt: Date.now(), sampleSize: 0, matchesWithData: 0, averageEvents: 0, coverage: {}, reason: error.message || "coverage check failed" }; }
 }
-
 function inUkSaturdayClosedPeriod(value) {
   if (!value) return false;
   const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date(value)).filter(part => part.type !== "literal").map(part => [part.type, part.value]));
@@ -217,7 +215,7 @@ async function liveFixtures(env) {
   const id = env.FIXTURE_INDEX.idFromName("supported-fixtures");
   let response = await env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/fixtures");
   let data = await response.json();
-  const staleEmpty = response.status === 404 || (!data.fixtures?.length && Date.now() - Number(data.fetchedAt || 0) > 6 * 3600000);
+  const staleEmpty = response.status === 404 || (!data.fixtures?.length && Date.now() - Number(data.fetchedAt || 0) > 60000);
   const staleSchema = data.windowMinutes !== 120 || !Array.isArray(data.enabledCompetitions);
   if (staleEmpty || staleSchema) { await refreshFixtureIndex(env); response = await env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/fixtures"); data = await response.json(); }
   const now = Date.now(), horizon = now + 2 * 60 * 60 * 1000, staleCutoff = now - 5 * 3600000;
