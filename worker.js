@@ -630,11 +630,13 @@ export class MatchRoom {
     session.finishedAt = Date.now();
     session.nextQuestionAt = null;
     this.rebuildLeaderboard();
-    await removeFixtureFromIndex(this.env, this.room.fixture?.id);
+    // Commit and broadcast the authoritative full-time state first. The fixture
+    // remains joinable until that final state has been sent to subscribers.
     await this.save();
     await this.removeAdminRoom();
     await this.state.storage.deleteAlarm();
     this.broadcast();
+    await removeFixtureFromIndex(this.env, this.room.fixture?.id);
   }
   async advance() {
     const s = this.room.session, r = s.round;
