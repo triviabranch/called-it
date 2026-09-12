@@ -1,4 +1,4 @@
-const ESPN_SITE_ROOT = "https://site.web.api.espn.com/apis/site/v2/sports";
+const ESPN_SITE_ROOT = "https://site.api.espn.com/apis/site/v2/sports";
 const ESPN_CORE_ROOT = "https://sports.core.api.espn.com/v2/sports";
 const SUPPORTED_COMPETITIONS = [
   { sport: "soccer", league: "eng.1", name: "Premier League", order: 0 },
