@@ -462,16 +462,21 @@ export class MatchRoom {
     if (!this.room.fixture?.id || this.room.mode !== "live") return;
     const league = this.room.provider?.league || "eng.1", config = competitionConfig(this.room.provider?.sport, league), sport = config.sport, id = this.room.provider.eventId;
     try {
-      const data = await readJson(`${siteBase(sport)}/${leaguePath(league)}/summary?event=${encodeURIComponent(id)}`);
+      const coreUrl = `${coreBase(sport, league)}/events/${encodeURIComponent(id)}/competitions/${encodeURIComponent(id)}`;
+      const paginateCore = forceBackfill;
+      const [summary, core] = await Promise.allSettled([
+        readJson(`${siteBase(sport)}/${leaguePath(league)}/summary?event=${encodeURIComponent(id)}`),
+        paginateCore ? readCorePlays(coreUrl) : readCorePlayPage(coreUrl)
+      ]);
+      if (summary.status !== "fulfilled") throw summary.reason;
+      const data = summary.value;
       const competition = data.header?.competitions?.[0] || data.competitions?.[0] || {};
       const nextFixture = fixture({ id, name: competition.shortName || competition.name, date: competition.date || this.room.fixture.date, competitions: [{ ...competition, competitors: competition.competitors || [] }], status: competition.status });
       this.room.fixture = { ...this.room.fixture, ...nextFixture, home: { ...this.room.fixture.home, ...nextFixture.home }, away: { ...this.room.fixture.away, ...nextFixture.away } };
-      const coreUrl = `${coreBase(sport, league)}/events/${encodeURIComponent(id)}/competitions/${encodeURIComponent(id)}`;
-      const now = Date.now(), paginateCore = forceBackfill;
-      const [core, summary] = await Promise.allSettled([paginateCore ? readCorePlays(coreUrl) : readCorePlayPage(coreUrl), Promise.resolve(data)]);
+      const now = Date.now();
       const coreItems = core.status === "fulfilled" ? (core.value.items || []) : [];
       const source = coreItems.length ? "core-live" : "summary-live-fallback";
-      const incoming = (coreItems.length ? coreItems : (summary.value?.plays || [])).map((p, i) => normaliseEvent(p, i, source)).filter(e => e.offset != null && e.type !== "other");
+      const incoming = (coreItems.length ? coreItems : (data.plays || [])).map((p, i) => normaliseEvent(p, i, source)).filter(e => e.offset != null && e.type !== "other");
       const known = new Set(this.room.timeline.map(e => e.id));
       for (const e of incoming) if (!known.has(e.id)) { this.room.timeline.push({ id: e.id, type: e.type, offset: e.offset, minute: e.minute, text: e.text, team: e.team || null }); this.room.events.unshift({ label: e.type === "goal" ? "GOAL" : "Match update", detail: e.text }); }
       this.room.timeline.sort((a, b) => a.offset - b.offset);
