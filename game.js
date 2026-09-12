@@ -47,7 +47,7 @@ function render() {
   const existingFeed = document.querySelector(".broadcast-feed-list"), feedWasNearTop = !existingFeed || existingFeed.scrollTop < 40, feedScrollTop = existingFeed?.scrollTop || 0;
   const f = state.fixture || { home:{name:"Home"}, away:{name:"Away"} }, r = state.session?.round, me = (state.players || []).find(p => p.id === playerId), answered = state.playerStatus?.[playerId] || [], incomplete = (state.preMatch || []).some(q => !answered.includes(q.id) && !q.settled);
   if (submittedRoundId && submittedRoundId !== r?.id) submittedRoundId = null;
-  const fixtureStatus = String(state.fixture?.status || "Fixture room"), isHalfTime = /half[\s-]?time|end of (the )?1st half/i.test(fixtureStatus), matchStatus = isHalfTime ? "HALF-TIME" : fixtureStatus;
+  const fixtureStatus = String(state.fixture?.status || "Fixture room"), isHalfTime = /half[\s-]?time|end of (the )?1st half/i.test(fixtureStatus), statusIncludesClock = /\b\d{1,3}(?::\d{2}|\+\d{1,2})/.test(fixtureStatus), matchStatus = isHalfTime ? "HALF-TIME" : statusIncludesClock ? "LIVE" : fixtureStatus;
   const now = Date.now(), remaining = r?.status === "voting" && r.voteEndsAt ? Math.max(0, Math.ceil((r.voteEndsAt - now) / 1000)) : 0, voteLabel = r?.status === "voting" && r.voteEndsAt && state.session?.mode === "simulation" ? `${remaining}s` : "";
   const join = !me ? `<input id="name" placeholder="Your name" maxlength="20"><button id="join">Join match</button>` : `<p class="joined">Joined as <b>${esc(me.name)}</b></p>`;
   const callLocked = Boolean(me && !incomplete && submittedRoundId && submittedRoundId === r?.id);
