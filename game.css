@@ -46,7 +46,8 @@
 @media(max-width:500px){.match-header{padding:13px 14px}.broadcast-event{padding:9px 10px}}
 /* Site-wide Called It palette and type */
 :root{--paper:#000;--ink:#f5efdf;--green:#020b18;--red:#ed5b4f;--yellow:#d6a14a;--muted:#9aa3ad}
-body{background:#000;color:var(--ink);font-family:'Pixelify Sans',sans-serif}
-h1,h2,h3,p,button,input,small,b,strong,span{font-family:'Pixelify Sans',sans-serif}
+body{background:#000;color:var(--ink);font-family:'Bitcount Single',sans-serif}
+h1,h2,h3,p,button,input,small,b,strong,span{font-family:'Bitcount Single',sans-serif}
+body,body *{font-family:'Bitcount Single',sans-serif!important}
 .brand{color:var(--ink)}.card,.pre-modal,.leaderboard-modal{background:#020b18;color:var(--ink);border-color:var(--yellow)}
 .match-header,.broadcast-feed,.broadcast-feed-list{background:#020b18}
