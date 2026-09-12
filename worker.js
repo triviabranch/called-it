@@ -489,7 +489,12 @@ export class MatchRoom {
   keyForQuestion(q, target) {
     if (!target) return null;
     if (q.type === "first-goal-kick-time") return String(Math.floor((target.offset || 0) / 60));
-    const f = this.room.fixture || {}; return target.team === f.home?.name ? "home" : target.team === f.away?.name ? "away" : null;
+    const f = this.room.fixture || {}, normalise = value => String(value || "").toLowerCase().replace(/\\b(fc|afc|city|town|united)\\b/g, "").replace(/[^a-z0-9]/g, "");
+    const targetName = normalise(target.team || target.text);
+    const homeName = normalise(f.home?.name), awayName = normalise(f.away?.name);
+    if (targetName && homeName && (targetName.includes(homeName) || homeName.includes(targetName))) return "home";
+    if (targetName && awayName && (targetName.includes(awayName) || awayName.includes(targetName))) return "away";
+    return null;
   }
   settlePreMatch(clock) {
     let changed = false;
