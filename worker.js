@@ -38,6 +38,15 @@ function nextLiveCallAt(fixture, now = Date.now()) {
   if (now <= firstCall) return firstCall;
   return firstCall + Math.ceil((now - firstCall) / LIVE_CALL_INTERVAL_MS) * LIVE_CALL_INTERVAL_MS;
 }
+function formatMatchTime(seconds, display) {
+  const raw = String(display || "").trim();
+  const stoppage = raw.match(/^(\\d{1,3})\\s*(?:\\+|['’])\\s*(\\d{1,2})$/);
+  if (stoppage) return `${Number(stoppage[1])}+${Number(stoppage[2])}`;
+  const normal = raw.match(/^(\\d{1,3})\\s*:\\s*(\\d{1,2})$/);
+  if (normal) return `${String(Number(normal[1])).padStart(2, "0")}:${String(Number(normal[2])).padStart(2, "0")}`;
+  const total = Math.max(0, Math.floor(Number(seconds) || 0));
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "access-control-allow-origin": "*" } });
@@ -386,7 +395,7 @@ export class MatchRoom {
   async syncAdminRoom(force = false) {
     if (!this.room?.fixture?.id || !this.env?.FIXTURE_INDEX || (!force && Date.now() - (this.adminSyncAt || 0) < 10000)) return;
     this.adminSyncAt = Date.now();
-    const rounds = [...(this.room.session?.rounds || []), this.room.session?.round].filter(Boolean).map(round => ({ id: round.id, type: round.targetType, question: round.question, status: round.status, result: round.result || null, openedAt: round.openedAt || null, voteEndsAt: round.voteEndsAt || null }));
+    const rounds = [...(this.room.session?.rounds || []), this.room.session?.round].filter(Boolean).map(round => ({ id: round.id, type: round.targetType, question: round.question, status: round.status, result: round.result || null, openedAt: round.openedAt || null, presentedMatchTime: round.presentedMatchTime || null, voteEndsAt: round.voteEndsAt || null }));
     const summary = { roomId: this.state.id.toString(), updatedAt: this.adminSyncAt, fixture: this.room.fixture, session: { status: this.room.session?.status, clock: this.room.session?.clock || 0, clockDisplay: this.room.session?.clockDisplay || null, nextQuestionAt: this.room.session?.nextQuestionAt || null }, playerCount: this.room.players?.length || 0, players: (this.room.players || []).map(player => ({ name: player.name, points: player.points || 0, calls: player.calls || player.rounds || 0, correct: player.correct || 0 })), calls: rounds, provider: { lastLivePollAt: this.room.lastLivePollAt || 0, error: this.room.provider?.error || null } };
     try { const id = this.env.FIXTURE_INDEX.idFromName("supported-fixtures"); await this.env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/register-room", { method: "POST", body: JSON.stringify(summary), headers: { "content-type": "application/json" } }); } catch {}
   }
@@ -404,11 +413,11 @@ export class MatchRoom {
       const predictions = this.room.predictions[player.id] || {}, calls = [];
       for (const question of [...(this.room.preMatch || []), ...(this.room.playerPreMatch?.[player.id] || [])]) {
         const answer = predictions.pre?.[question.id];
-        if (answer != null) calls.push({ id: question.id, question: question.question, answer: answerLabel(question, answer), status: statusFor(question, answer) });
+        if (answer != null) calls.push({ id: question.id, question: question.question, answer: answerLabel(question, answer), status: statusFor(question, answer), matchTime: "BEFORE KICK-OFF" });
       }
       for (const round of rounds) {
         const answer = predictions[round.id];
-        if (answer != null) calls.push({ id: round.id, question: round.question, answer: answerLabel(round, answer), status: statusFor(round, answer) });
+        if (answer != null) calls.push({ id: round.id, question: round.question, answer: answerLabel(round, answer), status: statusFor(round, answer), matchTime: round.presentedMatchTime || formatMatchTime(round.presentedAtClock, round.presentedAtClockDisplay) });
       }
       return { id: player.id, name: player.name, calls, points: player.points || 0, correct: player.correct || 0 };
     });
@@ -516,7 +525,13 @@ export class MatchRoom {
       if (!this.room.session.nextQuestionAt) this.room.session.nextQuestionAt = now + LIVE_CALL_INTERVAL_MS;
       return;
     }
-    if (this.room.session.liveScheduleKickoff !== kickoff) {
+    // ESPN can return a slightly different/normalised fixture date after the
+    // first request. Never re-anchor an already-running room on reconnect,
+    // otherwise a page refresh can make the same call slot appear due again.
+    if (!Number.isFinite(Number(this.room.session.liveScheduleKickoff))) {
+      this.room.session.liveScheduleKickoff = kickoff;
+      if (!this.room.session.nextQuestionAt) this.room.session.nextQuestionAt = nextLiveCallAt(this.room.fixture, now);
+    } else if (this.room.session.status === "lobby" && this.room.session.liveScheduleKickoff !== kickoff) {
       this.room.session.liveScheduleKickoff = kickoff;
       this.room.session.nextQuestionAt = nextLiveCallAt(this.room.fixture, now);
     }
@@ -532,7 +547,8 @@ export class MatchRoom {
     }
     const type = this.nextLiveType(), f = this.room.fixture || {};
     if (this.room.session.round?.status === "voting") { this.room.session.rounds ||= []; this.room.session.rounds.push(this.room.session.round); }
-    const round = { id: "round-" + (this.room.session.nextRoundIndex || 0), scheduledCallAt, targetEventId: null, targetType: type, question: "Who gets the next " + type + "?", choices: [{ key: "home", label: f.home?.name || "Home" }, { key: "away", label: f.away?.name || "Away" }], status: "voting", warmupEndsAt: null, voteEndsAt: null, result: null, openedAt: Date.now(), baselineEventIds: this.room.timeline.map(e => e.id) };
+    const presentedAtClock = Number(this.room.session.clock) || 0, presentedAtClockDisplay = this.room.session.clockDisplay || null;
+    const round = { id: "round-" + (this.room.session.nextRoundIndex || 0), scheduledCallAt, targetEventId: null, targetType: type, question: "Who gets the next " + type + "?", choices: [{ key: "home", label: f.home?.name || "Home" }, { key: "away", label: f.away?.name || "Away" }], status: "voting", warmupEndsAt: null, voteEndsAt: null, result: null, openedAt: Date.now(), presentedAtClock, presentedAtClockDisplay, presentedMatchTime: formatMatchTime(presentedAtClock, presentedAtClockDisplay), baselineEventIds: this.room.timeline.map(e => e.id) };
     this.room.session.lastQuestionType = type; this.room.session.round = round; this.room.session.nextRoundIndex = (this.room.session.nextRoundIndex || 0) + 1; this.room.session.nextQuestionAt = scheduledCallAt + LIVE_CALL_INTERVAL_MS;
     this.room.events.unshift({ label: "Vote now", detail: round.question }); await this.save(); this.broadcast(); this.schedule(10000);
   }
