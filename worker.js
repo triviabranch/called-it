@@ -249,11 +249,11 @@ async function liveFixtures(env) {
   const id = env.FIXTURE_INDEX.idFromName("supported-fixtures");
   let response = await env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/fixtures");
   let data = await response.json();
-  // The fixture catalogue is deliberately slower-moving than an active match.
-  // Live match updates are handled by MatchRoom's 15-second provider poll.
-  const staleIndex = response.status === 404 || Date.now() - Number(data.fetchedAt || 0) > 60000;
+  // The fixture catalogue is programme data. Active rooms own live status and
+  // remove themselves from this index when full time is authoritatively received.
+  const missingIndex = response.status === 404;
   const staleSchema = data.fixtureIndexVersion !== 2 || data.windowMinutes !== 120 || !Array.isArray(data.enabledCompetitions);
-  if (staleIndex || staleSchema) { await refreshFixtureIndex(env); response = await env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/fixtures"); data = await response.json(); }
+  if (missingIndex || staleSchema) { await refreshFixtureIndex(env); response = await env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/fixtures"); data = await response.json(); }
   const now = Date.now(), horizon = now + 2 * 60 * 60 * 1000, staleCutoff = now - 5 * 3600000;
   data.fixtures = (data.fixtures || []).filter(item => {
     const kickoff = new Date(item.date || 0).getTime();
