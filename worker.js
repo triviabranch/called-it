@@ -211,7 +211,8 @@ async function liveFixtures(env) {
   let response = await env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/fixtures");
   let data = await response.json();
   const staleEmpty = response.status === 404 || (!data.fixtures?.length && Date.now() - Number(data.fetchedAt || 0) > 6 * 3600000);
-  if (staleEmpty) { await refreshFixtureIndex(env); response = await env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/fixtures"); data = await response.json(); }
+  const staleSchema = data.windowMinutes !== 120 || !data.leagueCoverage?.["rugby-league:3"];
+  if (staleEmpty || staleSchema) { await refreshFixtureIndex(env); response = await env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/fixtures"); data = await response.json(); }
   const now = Date.now(), horizon = now + 2 * 60 * 60 * 1000, staleCutoff = now - 5 * 3600000;
   data.fixtures = (data.fixtures || []).filter(item => {
     const kickoff = new Date(item.date || 0).getTime();
