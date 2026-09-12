@@ -1,4 +1,5 @@
 let ws, roomId, state, playerId, role, submittedRoundId = null, leaderboardOpen = false, finalLeaderboardDismissed = false, callsOpen = false, joinModalOpen = false, joinModalDismissed = false;
+let lastStructuralRenderKey = "";
 const app = document.querySelector("#app"), query = new URLSearchParams(location.search);
 const directRoom = location.pathname.match(/^\/play\/([^/]+)$/i)?.[1];
 if (directRoom && !query.has("room")) query.set("room", directRoom);
@@ -84,8 +85,39 @@ function simulationPanel() {
   const action = paused ? "resume" : "pause";
   return `<section class="card sim-controls"><div class="section-head"><h2>Replay controls</h2><span class="muted">${status}</span></div>${s.status === "lobby" ? `<button data-sim-action="start">Start simulation</button>` : `<button class="secondary" data-sim-action="${action}" ${held ? "disabled" : ""}>${paused ? "Resume playback" : "Pause playback"}</button><div class="sim-speeds"><span class="muted">Speed</span>${[1,2,5,10,20,50].map(speed => `<button class="${Number(s.speed) === speed ? "selected" : ""}" data-sim-speed="${speed}">${speed}×</button>`).join("")}</div>`}<p class="muted sim-note">This controls the shared simulated match clock for every connected player.</p></section>`;
 }
+function transientRenderKey() {
+  if (!state) return "";
+  const s = state.session || {}, r = s.round || null;
+  return JSON.stringify({
+    fixture: state.fixture || null,
+    session: { status:s.status, mode:s.mode, nextQuestionAt:s.nextQuestionAt, round:r ? { id:r.id, status:r.status, question:r.question, voteEndsAt:r.voteEndsAt, result:r.result } : null },
+    timeline: state.timeline || [],
+    settledEventIds: state.settledEventIds || [],
+    players: state.players || [],
+    playerStatus: state.playerStatus || {},
+    playerPreMatch: state.playerPreMatch || {},
+    preMatch: state.preMatch || [],
+    committedCalls: state.committedCalls || [],
+    leaderboard: state.leaderboard || []
+  });
+}
+function updateTransientClock() {
+  const matchClock = document.querySelector("[data-match-clock]");
+  if (matchClock && state?.session) matchClock.textContent = clock(state.session.clock, state.session.clockDisplay);
+  const matchStatus = document.querySelector(".match-status");
+  const fixtureStatus = String(state?.fixture?.status || "Fixture room");
+  const isHalfTime = /half[\\s-]?time|end of (the )?1st half/i.test(fixtureStatus);
+  const statusIncludesClock = /\\b\\d{1,3}(?::\\d{2}|\\+\\d{1,2}|['’])/.test(fixtureStatus);
+  if (matchStatus) matchStatus.textContent = isHalfTime ? "HALF-TIME" : statusIncludesClock ? "LIVE" : fixtureStatus;
+}
 function render() {
   if (!state) return;
+  const structuralRenderKey = transientRenderKey();
+  if (structuralRenderKey === lastStructuralRenderKey) {
+    updateTransientClock();
+    return;
+  }
+  lastStructuralRenderKey = structuralRenderKey;
   const existingFeed = document.querySelector(".broadcast-feed-list"), feedWasNearTop = !existingFeed || existingFeed.scrollTop < 40, feedScrollTop = existingFeed?.scrollTop || 0;
   const f = state.fixture || { home:{name:"Home"}, away:{name:"Away"} }, r = state.session?.round, me = (state.players || []).find(p => p.id === playerId), answered = state.playerStatus?.[playerId] || [], availablePreMatch = state.playerPreMatch?.[playerId] || state.preMatch || [], incomplete = availablePreMatch.some(q => !answered.includes(q.id) && !q.settled);
   if (submittedRoundId && submittedRoundId !== r?.id) submittedRoundId = null;
@@ -115,7 +147,7 @@ function committedCallsModal() {
 
   const callsModal = committedCallsModal();
   const playerStats = me ? `<div class="player-stats calls-trigger" role="button" tabindex="0" data-calls-open aria-label="View players and committed calls"><div class="stats-heading"><span>Your match</span><small>${esc(me.name)}</small></div><div class="stat-tile"><b>${me.points || 0}</b><small>POINTS</small></div><div class="stat-tile"><b>${me.calls ?? me.rounds ?? 0}</b><small>CALLS MADE</small></div><div class="stat-tile"><b>${me.correct || 0}</b><small>CORRECT</small></div></div>` : '';
-  app.innerHTML = `<header class="brand"><a href="/" aria-label="Called It home"><img src="assets/called-it-wordmark.png" alt="Called It"></a><span class="room">${esc(state.session?.status || "LIVE")}</span></header><div class="eyebrow-row"><div class="eyebrow">LIVE MATCHDAY</div><button class="leaderboard-trigger" data-leaderboard-open>Leaderboard <span>↗</span></button></div><div class="match-header ${isHalfTime ? "at-half-time" : ""}"><h1>${esc(f.home?.name)} <i>${f.home?.score ?? "–"} — ${f.away?.score ?? "–"}</i> ${esc(f.away?.name)}</h1><p><strong class="match-status">${esc(matchStatus)}</strong> <span>·</span> match clock <b>${clock(state.session?.clock, state.session?.clockDisplay)}</b>${nextCallLabel ? ` <span class="next-call-countdown" data-next-call-countdown data-next-call-at="${state.session.nextQuestionAt}">· NEXT CALL IN <b>${nextCallLabel}</b></span>` : ""}</p></div>${playerStats}${callsModal}<section class="card broadcast-feed" aria-live="polite"><div class="section-head"><h2>Match feed</h2><span class="feed-live"><span class="live-dot"></span>LIVE</span></div><div class="broadcast-feed-list">${feed}</div></section><footer class="called-it-footer"><a href="/" aria-label="Called It home"><img src="assets/called-it-wordmark.png" alt="Called It"></a><span>Live matchday play-along</span></footer>${simulationPanel()}${!me ? `${joinCta}<p class="muted join-count">${state.players?.length || 0} supporter(s) are in the room.</p>` : ""}${playerJoinModal}${me && incomplete && r?.status !== "voting" ? preMatchCard(me) : ""}${me ? call : ""}${(leaderboardOpen || (state.session?.status === "complete" && !finalLeaderboardDismissed)) ? leaderboard : ""}`;
+  app.innerHTML = `<header class="brand"><a href="/" aria-label="Called It home"><img src="assets/called-it-wordmark.png" alt="Called It"></a><span class="room">${esc(state.session?.status || "LIVE")}</span></header><div class="eyebrow-row"><div class="eyebrow">LIVE MATCHDAY</div><button class="leaderboard-trigger" data-leaderboard-open>Leaderboard <span>↗</span></button></div><div class="match-header ${isHalfTime ? "at-half-time" : ""}"><h1>${esc(f.home?.name)} <i>${f.home?.score ?? "–"} — ${f.away?.score ?? "–"}</i> ${esc(f.away?.name)}</h1><p><strong class="match-status">${esc(matchStatus)}</strong> <span>·</span> match clock <b data-match-clock>${clock(state.session?.clock, state.session?.clockDisplay)}</b>${nextCallLabel ? ` <span class="next-call-countdown" data-next-call-countdown data-next-call-at="${state.session.nextQuestionAt}">· NEXT CALL IN <b>${nextCallLabel}</b></span>` : ""}</p></div>${playerStats}${callsModal}<section class="card broadcast-feed" aria-live="polite"><div class="section-head"><h2>Match feed</h2><span class="feed-live"><span class="live-dot"></span>LIVE</span></div><div class="broadcast-feed-list">${feed}</div></section><footer class="called-it-footer"><a href="/" aria-label="Called It home"><img src="assets/called-it-wordmark.png" alt="Called It"></a><span>Live matchday play-along</span></footer>${simulationPanel()}${!me ? `${joinCta}<p class="muted join-count">${state.players?.length || 0} supporter(s) are in the room.</p>` : ""}${playerJoinModal}${me && incomplete && r?.status !== "voting" ? preMatchCard(me) : ""}${me ? call : ""}${(leaderboardOpen || (state.session?.status === "complete" && !finalLeaderboardDismissed)) ? leaderboard : ""}`;
   const newFeed = document.querySelector(".broadcast-feed-list"); if (newFeed) { newFeed.scrollTop = feedWasNearTop ? 0 : feedScrollTop; }
   document.querySelector("[data-player-join-open]")?.addEventListener("click", () => { joinModalOpen = true; joinModalDismissed = false; render(); });
   document.querySelector("[data-player-join-cancel]")?.addEventListener("click", () => { joinModalOpen = false; joinModalDismissed = true; render(); });
