@@ -261,7 +261,16 @@ export default {
         return env.MATCH_ROOM.get(id).fetch(new Request("https://room/create", { method: "POST", body: JSON.stringify({ ...input, mode: input.mode === "simulation" ? "simulation" : "live" }), headers: { "content-type": "application/json" } }));
       } catch (error) { return json({ error: error.message || "Could not create fixture room" }, 400); }
     }
-    if (url.pathname === "/api/room" && request.method === "POST") { const id = env.MATCH_ROOM.newUniqueId(); return env.MATCH_ROOM.get(id).fetch(new Request("https://room/create", { method: "POST", body: await request.text(), headers: { "content-type": "application/json" } })); }
+    if (url.pathname === "/api/room" && request.method === "POST") {
+      const body = await request.text();
+      let input = null;
+      try { input = JSON.parse(body); } catch { /* MatchRoom will return the validation error. */ }
+      const isLiveFixture = input?.mode !== "simulation" && input?.fixture?.id;
+      const id = isLiveFixture
+        ? env.MATCH_ROOM.idFromName(`espn:${input.league || input.fixture.league || "eng.1"}:${input.fixture.id}`)
+        : env.MATCH_ROOM.newUniqueId();
+      return env.MATCH_ROOM.get(id).fetch(new Request("https://room/create", { method: "POST", body, headers: { "content-type": "application/json" } }));
+    }
     if (url.pathname.startsWith("/api/room/")) { try { return env.MATCH_ROOM.get(env.MATCH_ROOM.idFromString(url.pathname.split("/").pop())).fetch(request); } catch { return new Response("Invalid room", { status: 400 }); } }
     if (url.pathname === "/play") { const target = new URL("/game.html", request.url); target.search = url.search; return env.ASSETS.fetch(new Request(target, request)); }
     if (url.pathname === "/test" || url.pathname === "/test/") return env.ASSETS.fetch(new Request(new URL("/test/index.html", request.url), request));
