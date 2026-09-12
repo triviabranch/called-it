@@ -549,7 +549,7 @@ export class MatchRoom {
     if (s.mode === "live") {
       await this.refreshLive();
       this.settlePreMatch(s.clock);
-      const fixtureState = String(this.room.fixture?.state || "").toLowerCase(), hasLiveTimeline = this.room.timeline.some(event => event.offset != null); const fixtureIsLive = fixtureState === "in" || (fixtureState !== "post" && hasLiveTimeline); if (s.status === "running" && fixtureIsLive && (!s.round || s.round.status === "settled") && Date.now() >= (s.nextQuestionAt || 0)) { await this.openLiveRound(); return; }
+      const fixtureState = String(this.room.fixture?.state || "").toLowerCase(), hasLiveTimeline = this.room.timeline.some(event => event.offset != null); const fixtureIsLive = fixtureState === "in" || (fixtureState !== "post" && hasLiveTimeline); if (s.status === "running" && fixtureIsLive && Date.now() >= (s.nextQuestionAt || 0)) { await this.openLiveRound(); return; }
       const openRounds = [...(s.rounds || []), s.round].filter(round => round?.status === "voting");
       const resolvedRound = openRounds.find(round => this.room.timeline.some(e => !(round.baselineEventIds || []).includes(e.id) && e.type === round.targetType) || this.room.fixture.state === "post");
       if (resolvedRound) { await this.settleLiveRound(resolvedRound); return; }
