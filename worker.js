@@ -581,7 +581,7 @@ export class MatchRoom {
       await this.refreshLive();
       this.anchorLiveSchedule();
       this.settlePreMatch(s.clock);
-      const fixtureState = String(this.room.fixture?.state || "").toLowerCase(), hasLiveTimeline = this.room.timeline.some(event => event.offset != null); const fixtureIsLive = fixtureState === "in" || (fixtureState !== "post" && hasLiveTimeline); if (s.status === "running" && fixtureIsLive && Date.now() >= (s.nextQuestionAt || 0)) { await this.openLiveRound(); return; }
+      const fixtureState = String(this.room.fixture?.state || "").toLowerCase(), fixtureStatus = String(this.room.fixture?.status || ""), hasLiveTimeline = this.room.timeline.some(event => event.offset != null); const fixtureIsLive = fixtureState === "in" || (fixtureState !== "post" && hasLiveTimeline), fixtureIsAtHalfTime = /half[\s-]?time|end of (the )?1st half|\bHT\b|\binterval\b/i.test(fixtureStatus); if (s.status === "running" && fixtureIsLive && Date.now() >= (s.nextQuestionAt || 0)) { if (fixtureIsAtHalfTime) { while (s.nextQuestionAt && s.nextQuestionAt <= Date.now()) s.nextQuestionAt += LIVE_CALL_INTERVAL_MS; await this.save(); this.broadcast(); this.schedule(LIVE_PROVIDER_POLL_MS); return; } await this.openLiveRound(); return; }
       const openRounds = [...(s.rounds || []), s.round].filter(round => round?.status === "voting");
       const resolvedRound = openRounds.find(round => this.room.timeline.some(e => !(round.baselineEventIds || []).includes(e.id) && e.type === round.targetType) || this.room.fixture.state === "post");
       if (resolvedRound) { await this.settleLiveRound(resolvedRound); return; }
