@@ -40,9 +40,9 @@ function nextLiveCallAt(fixture, now = Date.now()) {
 }
 function formatMatchTime(seconds, display) {
   const raw = String(display || "").trim();
-  const stoppage = raw.match(/^(\\d{1,3})\\s*(?:\\+|['’])\\s*(\\d{1,2})$/);
+  const stoppage = raw.match(/^(\d{1,3})\s*(?:\\+|['’])\s*(\d{1,2})$/);
   if (stoppage) return `${Number(stoppage[1])}+${Number(stoppage[2])}`;
-  const normal = raw.match(/^(\\d{1,3})\\s*:\\s*(\\d{1,2})$/);
+  const normal = raw.match(/^(\d{1,3})\s*:\s*(\d{1,2})$/);
   if (normal) return `${String(Number(normal[1])).padStart(2, "0")}:${String(Number(normal[2])).padStart(2, "0")}`;
   const total = Math.max(0, Math.floor(Number(seconds) || 0));
   return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
