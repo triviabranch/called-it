@@ -37,7 +37,7 @@ loadConfig();
 
 button.onclick = async () => {
   button.disabled = true;
-  status.textContent = "Refreshing ESPN fixtures and validating leagues…";
+  status.textContent = "Refreshing fixtures and validating leagues…";
   try {
     const response = await fetch("/api/admin/refresh-fixtures", { method: "POST" });
     const data = await response.json();
