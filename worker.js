@@ -522,7 +522,7 @@ export class MatchRoom {
     return { seconds: Math.max(this.room.session.clock || 0, timelineSeconds), display: null };
   }
   nextLiveType() {
-    const types = ["corner", "foul", "shot", "goal-kick", "substitution", "goal"];
+    const types = ["corner", "foul", "shot", "goal-kick", "substitution", "goal", "card"];
     return types[(Number(this.room.session.nextRoundIndex) || 0) % types.length];
   }
   liveQuestion(type) {
@@ -532,7 +532,8 @@ export class MatchRoom {
       shot: "Which team has the next shot?",
       "goal-kick": "Which team gets the next goal kick?",
       substitution: "Which team makes the next substitution?",
-      goal: "Which team scores next?"
+      goal: "Which team scores next?",
+      card: "Which team gets the next card?"
     })[type] || "Which team has the next match event?";
   }
   anchorLiveSchedule(now = Date.now()) {
