@@ -465,13 +465,28 @@ export class MatchRoom {
     const status = fixtureData.status || {};
     const detail = String(status.shortDetail || status.detail || "");
     const rawClock = String(summary?.header?.competitions?.[0]?.status?.displayClock || "").trim();
-    const stoppage = rawClock.match(/^(\d+)\s*(?:\+|:)\s*(\d+)$/) || detail.match(/^(\d+)\s*['’]?\s*\+\s*(\d+)/);
-    if (stoppage) return { seconds: (Number(stoppage[1]) + Number(stoppage[2])) * 60, display: `${Number(stoppage[1])}+${Number(stoppage[2])}` };
-    const clockText = rawClock.replace(/[^0-9.]/g, "");
-    const minute = Number(clockText);
-    if (Number.isFinite(minute) && minute > 0) return { seconds: minute * 60, display: null };
-    const match = detail.match(/(\d+)\s*['’]/);
-    return { seconds: match ? Number(match[1]) * 60 : this.room.session.clock || 0, display: null };
+    const stoppage = rawClock.match(/^(\d+)\s*\+\s*(\d+)$/) || detail.match(/^(\d+)\s*['’]?\s*\+\s*(\d+)/);
+    if (stoppage) {
+      const minutes = Number(stoppage[1]), extra = Number(stoppage[2]);
+      return { seconds: (minutes + extra) * 60, display: `${minutes}+${extra}` };
+    }
+    const normalClock = rawClock.match(/^(\d+)\s*:\s*(\d{1,2})$/);
+    if (normalClock) {
+      const minutes = Number(normalClock[1]), seconds = Number(normalClock[2]);
+      return { seconds: minutes * 60 + seconds, display: `${minutes}:${String(seconds).padStart(2, "0")}` };
+    }
+    if (/^\d{3,4}$/.test(rawClock)) {
+      const extraDigits = rawClock.length === 4 ? 2 : 1;
+      const minutes = Number(rawClock.slice(0, -extraDigits)), extra = Number(rawClock.slice(-extraDigits));
+      return { seconds: (minutes + extra) * 60, display: `${minutes}+${extra}` };
+    }
+    const minuteOnly = rawClock.match(/^(\d+)$/);
+    if (minuteOnly) {
+      const minutes = Number(minuteOnly[1]);
+      return { seconds: minutes * 60, display: null };
+    }
+    const detailClock = detail.match(/(\d+)\s*['’]/);
+    return { seconds: detailClock ? Number(detailClock[1]) * 60 : this.room.session.clock || 0, display: null };
   }
   nextLiveType() {
     const types = ["corner", "card", "goal", "foul"];
