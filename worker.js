@@ -570,7 +570,7 @@ export class MatchRoom {
   }
   async advance() {
     const s = this.room.session, r = s.round;
-    if (s.mode === "live") {
+    if (this.room.mode === "live" || (this.room.fixture?.id && s.mode !== "simulation")) {
       await this.refreshLive();
       this.anchorLiveSchedule();
       this.settlePreMatch(s.clock);
