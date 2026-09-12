@@ -624,8 +624,8 @@ export class MatchRoom {
     session.nextQuestionAt = null;
     this.rebuildLeaderboard();
     await removeFixtureFromIndex(this.env, this.room.fixture?.id);
-    await this.removeAdminRoom();
     await this.save();
+    await this.removeAdminRoom();
     await this.state.storage.deleteAlarm();
     this.broadcast();
   }
