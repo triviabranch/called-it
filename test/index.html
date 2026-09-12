@@ -2,21 +2,21 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#e8dfcc"><title>Called It — ESPN Test Harness</title>
+<meta name="theme-color" content="#e8dfcc"><title>Called It — Feed Test Harness</title>
 <link rel="stylesheet" href="/test/test.css">
 </head>
 <body>
 <div class="grain"></div>
-<header class="test-head"><a href="/" class="wordmark">CALLED <i>IT</i></a><span>ESPN / TEST HARNESS</span><a href="/" class="back">Exit test ↗</a></header>
+<header class="test-head"><a href="/" class="wordmark">CALLED <i>IT</i></a><span>FEED / TEST HARNESS</span><a href="/" class="back">Exit test ↗</a></header>
 <main>
 <section class="intro" id="intro">
-<p class="eyebrow"><b></b> Internal playground · ESPN feed</p>
+<p class="eyebrow"><b></b> Internal playground · live feed</p>
 <h1>Replay<br><i>the match.</i></h1>
-<p class="lede">Pull a programme from ESPN, choose a fixture, then watch every update arrive against a simulated kick-off.</p>
+<p class="lede">Pull a programme, choose a fixture, then watch every update arrive against a simulated kick-off.</p>
 <button class="primary" id="openSetup">Configure a replay <span>↗</span></button>
 </section>
 <section class="playback hidden" id="playback">
-<div class="play-top"><div><p class="eyebrow"><b></b> Live replay · ESPN</p><h2 id="matchTitle">Match</h2><p class="muted" id="matchMeta">Loading match data…</p></div><button class="ghost" id="changeMatch">Change match</button></div>
+<div class="play-top"><div><p class="eyebrow"><b></b> Live replay</p><h2 id="matchTitle">Match</h2><p class="muted" id="matchMeta">Loading match data…</p></div><button class="ghost" id="changeMatch">Change match</button></div>
 <div class="scoreline"><span id="homeName">HOME</span><strong><i id="homeScore">–</i><em>—</em><i id="awayScore">–</i></strong><span id="awayName">AWAY</span></div>
 <div class="provenance" id="provenance"></div>
 <div class="clock-row"><div><span>SIMULATED MATCH CLOCK</span><strong id="matchClock">00:00</strong></div><div class="cue-status" id="cueStatus">Ready for kick-off cue</div></div>
@@ -31,7 +31,7 @@
 <div class="modal" id="setupModal">
 <div class="modal-top"><span>01 / SET UP REPLAY</span><button class="close" data-close>×</button></div>
 <h2>Choose a<br><i>programme.</i></h2>
-<p>Choose the competition in plain English. ESPN’s internal codes are handled automatically.</p>
+<p>Choose the competition in plain English. Internal competition codes are handled automatically.</p>
 <form id="setupForm"><label>Match date<input id="dateInput" type="date" required></label><label>Competition<select id="leagueInput" required>
 <option value="eng.1" selected>England · Premier League</option><option value="eng.2">England · Championship</option><option value="eng.3">England · League One</option><option value="eng.4">England · League Two</option><option value="eng.fa">England · FA Cup</option><option value="eng.league_cup">England · Carabao Cup</option><option value="eng.w.1">England · Women’s Super League</option>
 <option value="sco.1">Scotland · Premiership</option><option value="sco.2">Scotland · Championship</option>
