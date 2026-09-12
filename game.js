@@ -1,7 +1,7 @@
 let ws, roomId, state, playerId, role, submittedRoundId = null, leaderboardOpen = false;
 const app = document.querySelector("#app"), query = new URLSearchParams(location.search);
 const esc = value => String(value ?? "").replace(/[&<>\"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'\"':"&quot;"}[c]));
-const clock = (seconds, display) => { if (display) return display; const s = Math.max(0, Math.floor(seconds || 0)); return `${String(Math.floor(s / 60)).padStart(2,"0")}:${String(s % 60).padStart(2,"0")}`; };
+const clock = (seconds, display) => { const raw = String(display || "").trim(); const stoppage = raw.match(/^(\d{1,3})\s*(?:\+|:|['’])\s*(\d{1,2})$/); if (stoppage) return `${Number(stoppage[1])}+${Number(stoppage[2])}`; if (/^\d{3,4}$/.test(raw)) { const extraDigits = raw.length === 4 ? 2 : 1; return `${Number(raw.slice(0, -extraDigits))}+${Number(raw.slice(-extraDigits))}`; } const s = Math.max(0, Math.floor(seconds || 0)); return `${String(Math.floor(s / 60)).padStart(2,"0")}:${String(s % 60).padStart(2,"0")}`; };
 const send = message => { if (ws?.readyState === 1) ws.send(JSON.stringify(message)); };
 
 async function getFixtures() {
@@ -47,7 +47,7 @@ function render() {
   const existingFeed = document.querySelector(".broadcast-feed-list"), feedWasNearTop = !existingFeed || existingFeed.scrollTop < 40, feedScrollTop = existingFeed?.scrollTop || 0;
   const f = state.fixture || { home:{name:"Home"}, away:{name:"Away"} }, r = state.session?.round, me = (state.players || []).find(p => p.id === playerId), answered = state.playerStatus?.[playerId] || [], incomplete = (state.preMatch || []).some(q => !answered.includes(q.id) && !q.settled);
   if (submittedRoundId && submittedRoundId !== r?.id) submittedRoundId = null;
-  const fixtureStatus = String(state.fixture?.status || "Fixture room"), isHalfTime = /half[\s-]?time|end of (the )?1st half/i.test(fixtureStatus), statusIncludesClock = /\b\d{1,3}(?::\d{2}|\+\d{1,2})/.test(fixtureStatus), matchStatus = isHalfTime ? "HALF-TIME" : statusIncludesClock ? "LIVE" : fixtureStatus;
+  const fixtureStatus = String(state.fixture?.status || "Fixture room"), isHalfTime = /half[\s-]?time|end of (the )?1st half/i.test(fixtureStatus), statusIncludesClock = /\b\d{1,3}(?::\d{2}|\+\d{1,2}|['’])/.test(fixtureStatus), matchStatus = isHalfTime ? "HALF-TIME" : statusIncludesClock ? "LIVE" : fixtureStatus;
   const now = Date.now(), remaining = r?.status === "voting" && r.voteEndsAt ? Math.max(0, Math.ceil((r.voteEndsAt - now) / 1000)) : 0, voteLabel = r?.status === "voting" && r.voteEndsAt && state.session?.mode === "simulation" ? `${remaining}s` : "";
   const join = !me ? `<input id="name" placeholder="Your name" maxlength="20"><button id="join">Join match</button>` : `<p class="joined">Joined as <b>${esc(me.name)}</b></p>`;
   const callLocked = Boolean(me && !incomplete && submittedRoundId && submittedRoundId === r?.id);
