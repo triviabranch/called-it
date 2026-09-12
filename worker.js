@@ -413,7 +413,7 @@ export class MatchRoom {
   buildPreMatch(nextGoal = false, playerId = "") {
     const f = this.room.fixture || {}, home = f.home?.name || "Home", away = f.away?.name || "Away";
     return [
-      { id: nextGoal ? "next-goal-team-" + playerId : "first-goal-team", type: nextGoal ? "next-goal-team" : "first-goal-team", question: nextGoal ? "Which team scores next?" : "Which team scores first?", choices: [{ key: "home", label: home }, { key: "away", label: away }], settled: false, result: null, afterOffset: nextGoal ? (this.room.session?.clock || 0) : null },
+      { id: nextGoal ? "next-goal-team-" + playerId : "first-goal-team", type: nextGoal ? "next-goal-team" : "first-goal-team", question: nextGoal ? "Which team scores next?" : "Which team scores first?", choices: [{ key: "home", label: home }, { key: "away", label: away }], settled: false, result: null, afterOffset: nextGoal ? Math.max(this.room.session?.clock || 0, ...this.room.timeline.filter(event => event.type === "goal").map(event => Number(event.offset) || 0)) : null },
       { id: "first-goal-kick-time", type: "first-goal-kick-time", question: "What’s the time of the first goal kick?", input: { min: 0, max: 120, step: 1, suffix: "minutes" }, choices: [], settled: false, result: null },
       { id: "first-foul-team", type: "first-foul-team", question: "Which team commits the first foul?", choices: [{ key: "home", label: home }, { key: "away", label: away }], settled: false, result: null }
     ];
@@ -501,11 +501,11 @@ export class MatchRoom {
     this.room.session.lastQuestionType = type; this.room.session.round = round; this.room.session.nextRoundIndex = (this.room.session.nextRoundIndex || 0) + 1; this.room.session.nextQuestionAt = nextLiveCallAt();
     this.room.events.unshift({ label: "Vote now", detail: round.question }); await this.save(); this.broadcast(); this.schedule(10000);
   }
-  targetForQuestion(q) { return this.room.timeline.find(e => ((q.type === "first-goal-team" || q.type === "next-goal-team") && e.type === "goal" && (!q.afterOffset || e.offset > q.afterOffset)) || (q.type === "first-goal-kick-time" && e.type === "goal-kick") || (q.type === "first-foul-team" && e.type === "foul")); }
+  targetForQuestion(q) { return this.room.timeline.find(e => ((q.type === "first-goal-team" || q.type === "next-goal-team") && e.type === "goal" && (q.afterOffset == null || e.offset > q.afterOffset)) || (q.type === "first-goal-kick-time" && e.type === "goal-kick") || (q.type === "first-foul-team" && e.type === "foul")); }
   keyForQuestion(q, target) {
     if (!target) return null;
     if (q.type === "first-goal-kick-time") return String(Math.floor((target.offset || 0) / 60));
-    const f = this.room.fixture || {}, normalise = value => String(value || "").toLowerCase().replace(/\\b(fc|afc|city|town|united)\\b/g, "").replace(/[^a-z0-9]/g, "");
+    const f = this.room.fixture || {}, normalise = value => String(value || "").toLowerCase().replace(/\b(fc|afc|city|town|united)\\b/g, "").replace(/[^a-z0-9]/g, "");
     const targetName = normalise(target.team || target.text);
     const homeName = normalise(f.home?.name), awayName = normalise(f.away?.name);
     if (targetName && homeName && (targetName.includes(homeName) || homeName.includes(targetName))) return "home";
