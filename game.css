@@ -55,3 +55,8 @@ body:before{opacity:.16;background-image:radial-gradient(#514c40 .55px,transpare
 .live-page{background:#d9e1e8;color:var(--ink)}
 .finale{background:#175dcc;color:var(--paper)}
 .broadcast-feed-list{background:#dfe4e7}
+
+/* Restore pre-teletext type treatment */
+body,body *{font-family:Arial,sans-serif!important}
+h1,h2,.card h2,.match-header h1,.call-modal h2,.leaderboard-modal h2{font-family:Georgia,serif!important}
+.eyebrow,.phase,.countdown,.number-call,.fixture-status,.fine-print,.feed-live,.broadcast-event .event-minute,.called-it-footer span,.stats-heading span,.stat-tile b,.stat-tile small{font-family:monospace!important}
