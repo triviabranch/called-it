@@ -383,7 +383,29 @@ export class MatchRoom {
     try { const id = this.env.FIXTURE_INDEX.idFromName("supported-fixtures"); await this.env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/register-room", { method: "POST", body: JSON.stringify(summary), headers: { "content-type": "application/json" } }); } catch {}
   }
   async removeAdminRoom() { if (!this.env?.FIXTURE_INDEX) return; try { const id = this.env.FIXTURE_INDEX.idFromName("supported-fixtures"); await this.env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/remove-room", { method: "POST", body: JSON.stringify({ roomId: this.state.id.toString() }), headers: { "content-type": "application/json" } }); } catch {} }
-  public() { if (this.room.fixture?.id && !this.room.preMatch?.length) this.room.preMatch = this.buildPreMatch(); return { ...this.room, predictions: undefined, playerStatus: Object.fromEntries(this.room.players.map(p => [p.id, Object.keys(this.room.predictions[p.id]?.pre || {})])) }; }
+  public() {
+    if (this.room.fixture?.id && !this.room.preMatch?.length) this.room.preMatch = this.buildPreMatch();
+    const rounds = [...(this.room.session?.rounds || []), this.room.session?.round].filter(Boolean);
+    const answerLabel = (item, answer) => item?.choices?.find(choice => choice.key === answer)?.label || String(answer || "");
+    const statusFor = (item, answer) => {
+      if (item?.status === "settled" || item?.settled) return item.result?.correct && answer === item.result.correct ? "Correct" : "Missed";
+      if (item?.status === "locked") return "Locked";
+      return "Committed";
+    };
+    const committedCalls = this.room.players.map(player => {
+      const predictions = this.room.predictions[player.id] || {}, calls = [];
+      for (const question of this.room.preMatch || []) {
+        const answer = predictions.pre?.[question.id];
+        if (answer != null) calls.push({ id: question.id, question: question.question, answer: answerLabel(question, answer), status: statusFor(question, answer) });
+      }
+      for (const round of rounds) {
+        const answer = predictions[round.id];
+        if (answer != null) calls.push({ id: round.id, question: round.question, answer: answerLabel(round, answer), status: statusFor(round, answer) });
+      }
+      return { id: player.id, name: player.name, calls, points: player.points || 0, correct: player.correct || 0 };
+    });
+    return { ...this.room, predictions: undefined, playerStatus: Object.fromEntries(this.room.players.map(p => [p.id, Object.keys(this.room.predictions[p.id]?.pre || {})])), committedCalls };
+  }
   broadcast() { this.sockets = new Set(this.state.getWebSockets ? this.state.getWebSockets() : this.sockets); const m = JSON.stringify({ type: "state", state: this.public() }); for (const ws of this.sockets) { try { ws.send(m); } catch {} } }
   schedule(ms) { this.state.storage.setAlarm(Date.now() + Math.max(250, Math.min(ms, 7200000))); }
   buildPreMatch() {
