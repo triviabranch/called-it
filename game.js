@@ -1,5 +1,7 @@
 let ws, roomId, state, playerId, role, submittedRoundId = null, leaderboardOpen = false, callsOpen = false;
 const app = document.querySelector("#app"), query = new URLSearchParams(location.search);
+const directRoom = location.pathname.match(/^\/play\/([^/]+)$/i)?.[1];
+if (directRoom && !query.has("room")) query.set("room", directRoom);
 const esc = value => String(value ?? "").replace(/[&<>\"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'\"':"&quot;"}[c]));
 const clock = (seconds, display) => {
   const raw = String(display || "").trim();
@@ -60,7 +62,7 @@ function showJoinModal(fixture, league) {
 async function joinFixture(fixture, league) {
   if (!fixture) return;
   const button = document.querySelector(`[data-fixture="${CSS.escape(fixture.id)}"] .fixture-open`); if (button) button.disabled = true;
-  try { const response = await fetch("/api/room/fixture", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({ fixture, sport: fixture.sport || "soccer", league, mode:"live" }) }); const data = await response.json(); if (!response.ok) throw Error(data.error || "Could not open fixture"); location.href = `/play?room=${encodeURIComponent(data.roomId)}`; } catch (error) { if (button) button.disabled = false; alert(error.message); }
+  try { const response = await fetch("/api/room/fixture", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({ fixture, sport: fixture.sport || "soccer", league, mode:"live" }) }); const data = await response.json(); if (!response.ok) throw Error(data.error || "Could not open fixture"); location.href = `/play/${encodeURIComponent(data.roomId)}`; } catch (error) { if (button) button.disabled = false; alert(error.message); }
 }
 function connect() { ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/room/${roomId}`); ws.onmessage = event => { const message = JSON.parse(event.data); if (message.type === "identity") { playerId = message.playerId; localStorage.setItem(`calledItPlayer:${roomId}`, playerId); } if (message.state) { state = message.state; render(); } }; ws.onclose = () => setTimeout(connect, 1500); }
 function preMatchCard(me) {
