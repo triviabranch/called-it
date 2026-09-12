@@ -539,7 +539,7 @@ export class MatchRoom {
     const sets = [{ playerId: null, questions: this.room.preMatch || [] }, ...Object.entries(this.room.playerPreMatch || {}).map(([playerId, questions]) => ({ playerId, questions }))];
     for (const set of sets) for (const q of set.questions) {
       if (q.settled) continue; const target = this.targetForQuestion(q);
-      if (!target || target.offset > clock) continue;
+      if (!target || (this.room.mode !== "live" && target.offset > clock)) continue;
       const correct = this.keyForQuestion(q, target); q.settled = true; q.result = { correct, event: target.text || "Event occurred", eventId: target.id }; changed = true;
       const players = set.playerId ? this.room.players.filter(p => p.id === set.playerId) : this.room.players;
       for (const p of players) { const answer = this.room.predictions[p.id]?.pre?.[q.id]; if (answer) p.calls = Math.max(p.calls || 0, Object.keys(this.room.predictions[p.id]?.pre || {}).length); if (correct && answer === correct) { p.points = (p.points || 0) + 100; p.correct = (p.correct || 0) + 1; } }
