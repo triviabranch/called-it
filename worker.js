@@ -386,6 +386,16 @@ export class MatchRoom {
       pair[1].send(JSON.stringify({ type: "state", state: this.public() }));
       return new Response(null, { status: 101, webSocket: pair[0] });
     }
+    if (request.method === "POST" && new URL(request.url).pathname === "/kill") {
+      await this.load();
+      await this.removeAdminRoom();
+      for (const socket of this.sockets) { try { socket.close(1000, "Room ended by admin"); } catch {} }
+      this.sockets.clear();
+      await this.state.storage.deleteAlarm();
+      await this.state.storage.delete("room");
+      this.room = null;
+      return json({ killed: true });
+    }
     if (request.method === "POST" && !this.room) {
       await this.load();
       try {
@@ -398,16 +408,6 @@ export class MatchRoom {
         }
       } catch {}
       await this.save(); return Response.json({ roomId: this.state.id.toString(), state: this.public() });
-    }
-    if (request.method === "POST" && new URL(request.url).pathname === "/kill") {
-      await this.load();
-      await this.removeAdminRoom();
-      for (const socket of this.sockets) { try { socket.close(1000, "Room ended by admin"); } catch {} }
-      this.sockets.clear();
-      await this.state.storage.deleteAlarm();
-      await this.state.storage.delete("room");
-      this.room = null;
-      return json({ killed: true });
     }
     return new Response("Room unavailable", { status: 404 });
   }
