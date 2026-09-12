@@ -48,3 +48,10 @@ body:before{opacity:.16;background-image:radial-gradient(#514c40 .55px,transpare
 .broadcast-event small{color:var(--muted)}
 .player-stats{background:var(--green);color:var(--paper)}
 .called-it-footer{border-top-color:rgba(7,24,45,.2)}
+
+/* Restore remaining pre-teletext surfaces */
+.match-sheet{background:var(--paper);border-color:var(--ink);box-shadow:10px 10px 0 var(--red)}
+.quote-strip{background:var(--ink);color:var(--paper)}
+.live-page{background:#d9e1e8;color:var(--ink)}
+.finale{background:#175dcc;color:var(--paper)}
+.broadcast-feed-list{background:#dfe4e7}
