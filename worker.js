@@ -109,12 +109,12 @@ async function espnApi(url) {
     if (bits[2] === "match" && bits[3]) {
       const id = bits[3];
       const summaryUrl = `${siteBase(sport)}/${slug}/summary?event=${encodeURIComponent(id)}`;
-      const coreBase = `${coreBase(sport, slug)}/events/${encodeURIComponent(id)}/competitions/${encodeURIComponent(id)}`;
+      const coreUrl = `${coreBase(sport, slug)}/events/${encodeURIComponent(id)}/competitions/${encodeURIComponent(id)}`;
       const [summary, plays, situation, probabilities] = await Promise.allSettled([
         readJson(summaryUrl),
-        readCorePlays(coreBase),
-        readJson(`${coreBase}/situation`),
-        readJson(`${coreBase}/probabilities?limit=300`)
+        readCorePlays(coreUrl),
+        readJson(`${coreUrl}/situation`),
+        readJson(`${coreUrl}/probabilities?limit=300`)
       ]);
       if (summary.status === "rejected") throw summary.reason;
       const data = summary.value;
@@ -334,9 +334,9 @@ export class MatchRoom {
       const competition = data.header?.competitions?.[0] || data.competitions?.[0] || {};
       const nextFixture = fixture({ id, name: competition.shortName || competition.name, date: competition.date, competitions: [{ ...competition, competitors: competition.competitors || [] }], status: competition.status });
       this.room.fixture = { ...this.room.fixture, ...nextFixture, home: { ...this.room.fixture.home, ...nextFixture.home }, away: { ...this.room.fixture.away, ...nextFixture.away } };
-      const coreBase = `${coreBase(sport, league)}/events/${encodeURIComponent(id)}/competitions/${encodeURIComponent(id)}`;
+      const coreUrl = `${coreBase(sport, league)}/events/${encodeURIComponent(id)}/competitions/${encodeURIComponent(id)}`;
       const now = Date.now(), paginateCore = !this.room.lastCorePaginationAt || now - this.room.lastCorePaginationAt >= 60000;
-      const [core, summary] = await Promise.allSettled([paginateCore ? readCorePlays(coreBase) : readCorePlayPage(coreBase), Promise.resolve(data)]);
+      const [core, summary] = await Promise.allSettled([paginateCore ? readCorePlays(coreUrl) : readCorePlayPage(coreUrl), Promise.resolve(data)]);
       const coreItems = core.status === "fulfilled" ? (core.value.items || []) : [];
       const source = coreItems.length ? "core-live" : "summary-live-fallback";
       const incoming = (coreItems.length ? coreItems : (summary.value?.plays || [])).map((p, i) => normaliseEvent(p, i, source)).filter(e => e.offset != null && e.type !== "other");
