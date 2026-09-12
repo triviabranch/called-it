@@ -158,7 +158,15 @@ function committedCallsModal() {
   document.querySelectorAll("[data-sim-action]").forEach(button => button.onclick = () => { if (button.dataset.simAction === "start") send({type:"start"}); else send({type:"simulation-control", action:button.dataset.simAction}); });
   document.querySelectorAll("[data-sim-speed]").forEach(button => button.onclick = () => send({type:"simulation-control", action:"speed", speed:Number(button.dataset.simSpeed)}));
   document.querySelectorAll("[data-calls-open]").forEach(button => { const open = () => { callsOpen = true; render(); }; button.onclick = open; button.onkeydown = event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); } }; });
-  document.querySelectorAll("[data-calls-close]").forEach(button => button.onclick = event => { if (event.target === button || button.classList.contains("modal-close")) { callsOpen = false; render(); } });
+  document.querySelectorAll("[data-calls-close]").forEach(element => element.onclick = event => {
+    const closeButton = event.target.closest?.(".modal-close");
+    if (event.target === element || closeButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      callsOpen = false;
+      render();
+    }
+  });
   document.querySelectorAll("[data-leaderboard-open]").forEach(button => button.onclick = () => { leaderboardOpen = true; render(); });
   document.querySelectorAll("[data-leaderboard-close]").forEach(button => button.onclick = event => { if (event.target === button || button.classList.contains("modal-close")) { leaderboardOpen = false; if (state.session?.status === "complete") finalLeaderboardDismissed = true; render(); } });
   if (leaderboardOpen || callsOpen) document.addEventListener("keydown", event => { if (event.key === "Escape") { leaderboardOpen = false; callsOpen = false; render(); } }, { once:true });
