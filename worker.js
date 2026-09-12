@@ -30,7 +30,13 @@ function siteBase(sport) { return `${ESPN_SITE_ROOT}/${encodeURIComponent(sport)
 function coreBase(sport, league) { return `${ESPN_CORE_ROOT}/${encodeURIComponent(sport)}/leagues/${leaguePath(league)}`; }
 const DEFAULT_BROADCAST_RULES = { ukPremierLeagueSaturdayBlackout: true };
 const LIVE_CALL_INTERVAL_MS = 7.5 * 60 * 1000;
-const nextLiveCallAt = () => Date.now() + LIVE_CALL_INTERVAL_MS;
+function nextLiveCallAt(fixture, now = Date.now()) {
+  const kickoff = Date.parse(fixture?.date);
+  if (!Number.isFinite(kickoff)) return now + LIVE_CALL_INTERVAL_MS;
+  const firstCall = kickoff + LIVE_CALL_INTERVAL_MS;
+  if (now <= firstCall) return firstCall;
+  return firstCall + Math.ceil((now - firstCall) / LIVE_CALL_INTERVAL_MS) * LIVE_CALL_INTERVAL_MS;
+}
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "access-control-allow-origin": "*" } });
@@ -497,11 +503,23 @@ export class MatchRoom {
     const previous = this.room.session.lastQuestionType;
     return types.find(type => type !== previous) || "corner";
   }
+  anchorLiveSchedule(now = Date.now()) {
+    const kickoff = Date.parse(this.room.fixture?.date);
+    if (!Number.isFinite(kickoff)) {
+      if (!this.room.session.nextQuestionAt) this.room.session.nextQuestionAt = now + LIVE_CALL_INTERVAL_MS;
+      return;
+    }
+    if (this.room.session.liveScheduleKickoff !== kickoff) {
+      this.room.session.liveScheduleKickoff = kickoff;
+      this.room.session.nextQuestionAt = nextLiveCallAt(this.room.fixture, now);
+    }
+  }
   async openLiveRound() {
+    const scheduledCallAt = Number(this.room.session.nextQuestionAt) || nextLiveCallAt(this.room.fixture);
     const type = this.nextLiveType(), f = this.room.fixture || {};
     if (this.room.session.round?.status === "voting") { this.room.session.rounds ||= []; this.room.session.rounds.push(this.room.session.round); }
     const round = { id: "round-" + (this.room.session.nextRoundIndex || 0), targetEventId: null, targetType: type, question: "Who gets the next " + type + "?", choices: [{ key: "home", label: f.home?.name || "Home" }, { key: "away", label: f.away?.name || "Away" }], status: "voting", warmupEndsAt: null, voteEndsAt: null, result: null, openedAt: Date.now(), baselineEventIds: this.room.timeline.map(e => e.id) };
-    this.room.session.lastQuestionType = type; this.room.session.round = round; this.room.session.nextRoundIndex = (this.room.session.nextRoundIndex || 0) + 1; this.room.session.nextQuestionAt = nextLiveCallAt();
+    this.room.session.lastQuestionType = type; this.room.session.round = round; this.room.session.nextRoundIndex = (this.room.session.nextRoundIndex || 0) + 1; this.room.session.nextQuestionAt = scheduledCallAt + LIVE_CALL_INTERVAL_MS;
     this.room.events.unshift({ label: "Vote now", detail: round.question }); await this.save(); this.broadcast(); this.schedule(10000);
   }
   targetForQuestion(q) { return this.room.timeline.find(e => (((q.type === "first-goal-team" || q.type === "next-goal-team") && e.type === "goal") || ((q.type === "first-goal-kick-time" || q.type === "next-goal-kick-time") && e.type === "goal-kick") || ((q.type === "first-foul-team" || q.type === "next-foul-team") && e.type === "foul")) && (q.afterOffset == null || e.offset > q.afterOffset)); }
@@ -529,7 +547,7 @@ export class MatchRoom {
   }
   rebuildLeaderboard() { this.room.leaderboard = [...this.room.players].sort((a,b) => (b.points||0)-(a.points||0)).map((p,i) => ({ rank:i+1, name:p.name, points:p.points||0, rounds:p.calls ?? p.rounds ?? 0 })); }
   async startSession() {
-    if (this.room.mode === "live") { this.room.session = { status: "running", startedAt: Date.now(), round: null, clock: 0, nextRoundIndex: 0, nextQuestionAt: nextLiveCallAt(), mode: "live", speed: 1, lastQuestionType: null }; await this.save(); this.broadcast(); this.schedule(1000); return; }
+    if (this.room.mode === "live") { this.room.session = { status: "running", startedAt: Date.now(), round: null, clock: 0, nextRoundIndex: 0, nextQuestionAt: nextLiveCallAt(this.room.fixture), liveScheduleKickoff: Date.parse(this.room.fixture?.date), mode: "live", speed: 1, lastQuestionType: null }; await this.save(); this.broadcast(); this.schedule(1000); return; }
     const first = this.nextTarget(0);
     if (!first) { this.room.session.status = "complete"; return; }
     this.room.session = { status: "running", startedAt: Date.now(), round: null, clock: 0, clockBase: 0, nextRoundIndex: 0, mode: this.room.mode || "live", speed: this.room.mode === "simulation" ? (this.room.speed || 1) : 1 };
@@ -547,6 +565,7 @@ export class MatchRoom {
     const s = this.room.session, r = s.round;
     if (s.mode === "live") {
       await this.refreshLive();
+      this.anchorLiveSchedule();
       this.settlePreMatch(s.clock);
       const fixtureState = String(this.room.fixture?.state || "").toLowerCase(), hasLiveTimeline = this.room.timeline.some(event => event.offset != null); const fixtureIsLive = fixtureState === "in" || (fixtureState !== "post" && hasLiveTimeline); if (s.status === "running" && fixtureIsLive && Date.now() >= (s.nextQuestionAt || 0)) { await this.openLiveRound(); return; }
       const openRounds = [...(s.rounds || []), s.round].filter(round => round?.status === "voting");
@@ -587,7 +606,7 @@ export class MatchRoom {
   }
   async webSocketMessage(ws, raw) {
     let m; try { m = JSON.parse(raw); } catch { return; } if (!this.room) await this.load(); this.room.lastActivity = Date.now();
-    if (m.type === "join") { let p = this.room.players.find(x => x.id === m.playerId); if (!p) { p = { id: crypto.randomUUID(), name: String(m.name || "Supporter").slice(0,20), points: 0, rounds: 0, calls: 0, correct: 0 }; this.room.players.push(p); } else if (m.name) p.name = String(m.name).slice(0,20); this.room.playerPreMatch ||= {}; if (this.room.fixture?.state === "in") { const current = this.buildPreMatch(true, p.id), hasRelevantEvent = this.room.timeline.some(e => ["goal", "goal-kick", "foul"].includes(e.type)); if (!this.room.playerPreMatch[p.id] && hasRelevantEvent) this.room.playerPreMatch[p.id] = current; else if (this.room.playerPreMatch[p.id]) { this.room.playerPreMatch[p.id].forEach((oldQuestion, index) => { const nextQuestion = current[index]; if (oldQuestion && nextQuestion && !oldQuestion.settled && nextQuestion.type.startsWith("next-")) Object.assign(oldQuestion, { type: nextQuestion.type, question: nextQuestion.question, input: nextQuestion.input, choices: nextQuestion.choices, afterOffset: nextQuestion.afterOffset }); }); } } if (this.room.mode === "live" && this.room.session.status === "lobby") { this.room.session = { status: "running", startedAt: Date.now(), round: null, clock: 0, nextRoundIndex: 0, nextQuestionAt: nextLiveCallAt(), mode: "live", speed: 1, lastQuestionType: null }; } this.rebuildLeaderboard(); ws.send(JSON.stringify({ type:"identity", playerId:p.id })); }
+    if (m.type === "join") { let p = this.room.players.find(x => x.id === m.playerId); if (!p) { p = { id: crypto.randomUUID(), name: String(m.name || "Supporter").slice(0,20), points: 0, rounds: 0, calls: 0, correct: 0 }; this.room.players.push(p); } else if (m.name) p.name = String(m.name).slice(0,20); this.room.playerPreMatch ||= {}; if (this.room.fixture?.state === "in") { const current = this.buildPreMatch(true, p.id), hasRelevantEvent = this.room.timeline.some(e => ["goal", "goal-kick", "foul"].includes(e.type)); if (!this.room.playerPreMatch[p.id] && hasRelevantEvent) this.room.playerPreMatch[p.id] = current; else if (this.room.playerPreMatch[p.id]) { this.room.playerPreMatch[p.id].forEach((oldQuestion, index) => { const nextQuestion = current[index]; if (oldQuestion && nextQuestion && !oldQuestion.settled && nextQuestion.type.startsWith("next-")) Object.assign(oldQuestion, { type: nextQuestion.type, question: nextQuestion.question, input: nextQuestion.input, choices: nextQuestion.choices, afterOffset: nextQuestion.afterOffset }); }); } } if (this.room.mode === "live" && this.room.session.status === "lobby") { this.room.session = { status: "running", startedAt: Date.now(), round: null, clock: 0, nextRoundIndex: 0, nextQuestionAt: nextLiveCallAt(this.room.fixture), liveScheduleKickoff: Date.parse(this.room.fixture?.date), mode: "live", speed: 1, lastQuestionType: null }; } this.rebuildLeaderboard(); ws.send(JSON.stringify({ type:"identity", playerId:p.id })); }
     if (m.type === "prematch") { const p = this.room.players.find(x => x.id === m.playerId), q = (this.room.playerPreMatch?.[m.playerId] || []).find(x => x.id === m.questionId) || (this.room.preMatch || []).find(x => x.id === m.questionId); if (p && q && !q.settled && ((q.input && Number.isInteger(Number(m.answer)) && Number(m.answer) >= q.input.min && Number(m.answer) <= q.input.max) || q.choices.some(c => c.key === m.answer))) { this.room.predictions[p.id] ||= {}; this.room.predictions[p.id].pre ||= {}; if (!this.room.predictions[p.id].pre[q.id]) p.calls = (p.calls || 0) + 1; this.room.predictions[p.id].pre[q.id] = String(m.answer); } }
     if (m.type === "start") await this.startSession();
     if (m.type === "predict") { const p = this.room.players.find(x => x.id === m.playerId), r = this.room.session.round, voteOpen = !r?.voteEndsAt || Date.now() < r.voteEndsAt; if (p && r?.status === "voting" && voteOpen && r.id === m.roundId) { this.room.predictions[p.id] ||= {}; if (!this.room.predictions[p.id][r.id]) p.calls = (p.calls || 0) + 1; this.room.predictions[p.id][r.id] = m.answer; if (this.room.session.mode === "simulation") { r.status = "locked"; this.room.session.holding = false; this.room.session.clockBase = this.room.session.clock; this.room.session.startedAt = Date.now(); } } }
