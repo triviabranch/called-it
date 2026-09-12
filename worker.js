@@ -312,7 +312,7 @@ export class FixtureIndex {
   }
 }
 export class MatchRoom {
-  constructor(state, env) { this.state = state; this.env = env; this.sockets = new Set(); this.room = null; }
+  constructor(state, env) { this.state = state; this.env = env; this.sockets = new Set(state.getWebSockets ? state.getWebSockets() : []); this.room = null; }
   async fetch(request) {
     if (request.headers.get("Upgrade") === "websocket") {
       const pair = new WebSocketPair(); this.state.acceptWebSocket(pair[1]); this.sockets.add(pair[1]);
@@ -345,7 +345,7 @@ export class MatchRoom {
   }
   async save() { this.room.lastActivity = Date.now(); await this.state.storage.put("room", this.room); await this.state.storage.setAlarm(Date.now() + 7200000); }
   public() { if (this.room.fixture?.id && !this.room.preMatch?.length) this.room.preMatch = this.buildPreMatch(); return { ...this.room, predictions: undefined, playerStatus: Object.fromEntries(this.room.players.map(p => [p.id, Object.keys(this.room.predictions[p.id]?.pre || {})])) }; }
-  broadcast() { const m = JSON.stringify({ type: "state", state: this.public() }); for (const ws of this.sockets) { try { ws.send(m); } catch {} } }
+  broadcast() { this.sockets = new Set(this.state.getWebSockets ? this.state.getWebSockets() : this.sockets); const m = JSON.stringify({ type: "state", state: this.public() }); for (const ws of this.sockets) { try { ws.send(m); } catch {} } }
   schedule(ms) { this.state.storage.setAlarm(Date.now() + Math.max(250, Math.min(ms, 7200000))); }
   buildPreMatch() {
     const f = this.room.fixture || {}, home = f.home?.name || "Home", away = f.away?.name || "Away";
@@ -513,8 +513,8 @@ export class MatchRoom {
     await this.save(); this.broadcast();
     if (m.type === "start" || m.type === "predict" || m.type === "join" || m.type === "simulation-control") this.schedule(500);
   }
-  async closeRoom(ws) { this.sockets.delete(ws); if (this.sockets.size === 0) { if (this.room) await this.state.storage.put("room", this.room); this.schedule(30000); } }
+  async closeRoom(ws) { this.sockets = new Set(this.state.getWebSockets ? this.state.getWebSockets() : this.sockets); this.sockets.delete(ws); if (this.sockets.size === 0) { if (this.room) await this.state.storage.put("room", this.room); this.schedule(30000); } }
   async webSocketClose(ws) { await this.closeRoom(ws); }
   async webSocketError(ws) { await this.closeRoom(ws); }
-  async alarm() { if (this.sockets.size === 0) { if (this.room) { await this.state.storage.delete("room"); this.room = null; } await this.state.storage.deleteAlarm(); } else { await this.load(); await this.advance(); } }
+  async alarm() { this.sockets = new Set(this.state.getWebSockets ? this.state.getWebSockets() : this.sockets); if (this.sockets.size === 0) { if (this.room) { await this.state.storage.delete("room"); this.room = null; } await this.state.storage.deleteAlarm(); } else { await this.load(); await this.advance(); } }
 }
