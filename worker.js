@@ -148,16 +148,16 @@ async function validateLeague(sport, league, programme) {
     const rows = await Promise.all(matches.map(async match => {
       try {
         const config = competitionConfig(sport, league);
-        const summary = await readJson(`${siteBase(config.sport)}/${leaguePath(config.league)}/summary?event=${encodeURIComponent(match.id)}`);
-        const plays = summary.plays || [];
-        const events = plays.map((item, index) => normaliseEvent(item, index, "coverage-summary")).filter(event => event.type !== "other" && event.offset != null);
+        const base = `${coreBase(config.sport, config.league)}/events/${encodeURIComponent(match.id)}/competitions/${encodeURIComponent(match.id)}`;
+        const plays = await readJson(`${base}/plays?limit=300&page=1&lang=en&region=us`);
+        const events = (plays.items || []).map((item, index) => normaliseEvent(item, index, "coverage-core")).filter(event => event.type !== "other" && event.offset != null);
         return { id: String(match.id), events: events.length, types: [...new Set(events.map(event => event.type))] };
       } catch { return { id: String(match.id), events: 0, types: [] }; }
     }));
     const has = type => rows.filter(row => row.types.includes(type)).length, sampleSize = rows.length;
     const averageEvents = sampleSize ? Math.round(rows.reduce((sum, row) => sum + row.events, 0) / sampleSize) : 0;
     const approved = sampleSize >= 1 && averageEvents >= 1;
-    return { sport, league, approved, checkedAt: Date.now(), sampleSize, matchesWithData: rows.filter(row => row.events > 0).length, averageEvents, coverage: { corner: has("corner"), foul: has("foul"), card: has("card"), goal: has("goal"), substitution: has("substitution"), shot: has("shot") }, reason: approved ? "summary feed has timestamped event coverage" : "no timestamped event coverage returned by ESPN" };
+    return { sport, league, approved, checkedAt: Date.now(), sampleSize, matchesWithData: rows.filter(row => row.events > 0).length, averageEvents, coverage: { corner: has("corner"), foul: has("foul"), card: has("card"), goal: has("goal"), substitution: has("substitution"), shot: has("shot") }, reason: approved ? "Core feed has timestamped event coverage" : "no timestamped event coverage returned by ESPN" };
   } catch (error) { return { sport, league, approved: false, checkedAt: Date.now(), sampleSize: 0, matchesWithData: 0, averageEvents: 0, coverage: {}, reason: error.message || "coverage check failed" }; }
 }
 function inUkSaturdayClosedPeriod(value) {
