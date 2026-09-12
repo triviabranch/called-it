@@ -1,4 +1,4 @@
-const pixelify = document.createElement("link"); pixelify.rel = "stylesheet"; pixelify.href = "https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;500;600;700&display=swap"; document.head.appendChild(pixelify);
+const bitcount = document.createElement("link"); bitcount.rel = "stylesheet"; bitcount.href = "https://fonts.googleapis.com/css2?family=Bitcount+Single:wght@100..900&display=swap"; document.head.appendChild(bitcount);
 let ws, roomId, state, playerId, role, submittedRoundId = null, leaderboardOpen = false;
 const app = document.querySelector("#app"), query = new URLSearchParams(location.search);
 const esc = value => String(value ?? "").replace(/[&<>\"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'\"':"&quot;"}[c]));
