@@ -445,7 +445,7 @@ export class MatchRoom {
       const added = new Set();
       const addCall = (id, question, answer, status, matchTime) => {
         if (answer == null || added.has(String(id))) return;
-        added.add(String(id)); calls.push({ id, question, answer: answerLabel(question, answer), status: statusFor(question, answer) || status || "Committed", matchTime });
+        added.add(String(id)); calls.push({ id, question: question?.question || question?.label || String(question || "Call"), answer: answerLabel(question, answer), status: statusFor(question, answer) || status || "Committed", matchTime });
       };
       for (const question of [...(this.room.preMatch || []), ...(this.room.playerPreMatch?.[player.id] || [])]) {
         const answer = predictions.pre?.[question.id];
