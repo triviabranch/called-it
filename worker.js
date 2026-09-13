@@ -215,7 +215,11 @@ async function pullFixtures(broadcastRules = DEFAULT_BROADCAST_RULES, enabledCom
     ? validateLeague(result.value.sport, result.value.league, result.value.events)
     : ({ sport: "unknown", league: "unknown", approved: false, checkedAt: Date.now(), sampleSize: 0, matchesWithData: 0, averageEvents: 0, coverage: {}, reason: result.reason?.message || "programme pull failed" })));
   const coverage = Object.fromEntries(coverageResults.map(result => [`${result.sport}:${result.league}`, result]));
-  const horizon = now + 2 * 60 * 60 * 1000;
+  // Keep a near-term catalogue in the Durable Object. The public endpoint
+  // applies the two-hour playable window below; the index must retain matches
+  // that are still outside that window so they can appear as kick-off nears
+  // without waiting for another scheduled refresh.
+  const horizon = now + 48 * 60 * 60 * 1000;
   const fixtures = programmes.flatMap(result => result.status === "fulfilled"
     ? result.value.events.map(item => {
         const config = competitionConfig(result.value.sport, result.value.league);
@@ -234,7 +238,7 @@ async function pullFixtures(broadcastRules = DEFAULT_BROADCAST_RULES, enabledCom
       const byCompetition = (LEAGUE_HIERARCHY[a.league] ?? 999) - (LEAGUE_HIERARCHY[b.league] ?? 999);
       return byCompetition || a.name.localeCompare(b.name);
     });
-  return { provider: "ESPN", fixtureIndexVersion: 2, fetchedAt: now, fixtures, leagueCoverage: coverage, broadcastRules, enabledCompetitions: [...enabled], windowMinutes: 120 };
+  return { provider: "ESPN", fixtureIndexVersion: 3, fetchedAt: now, fixtures, leagueCoverage: coverage, broadcastRules, enabledCompetitions: [...enabled], windowMinutes: 120, catalogueWindowMinutes: 2880 };
 }
 async function refreshFixtureIndex(env) {
   const id = env.FIXTURE_INDEX.idFromName("supported-fixtures");
@@ -252,7 +256,7 @@ async function liveFixtures(env) {
   // The fixture catalogue is programme data. Active rooms own live status and
   // remove themselves from this index when full time is authoritatively received.
   const missingIndex = response.status === 404;
-  const staleSchema = data.fixtureIndexVersion !== 2 || data.windowMinutes !== 120 || !Array.isArray(data.enabledCompetitions);
+  const staleSchema = data.fixtureIndexVersion !== 3 || data.windowMinutes !== 120 || data.catalogueWindowMinutes !== 2880 || !Array.isArray(data.enabledCompetitions);
   if (missingIndex || staleSchema) { await refreshFixtureIndex(env); response = await env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/fixtures"); data = await response.json(); }
   const now = Date.now(), horizon = now + 2 * 60 * 60 * 1000, staleCutoff = now - 5 * 3600000;
   data.fixtures = (data.fixtures || []).filter(item => {
