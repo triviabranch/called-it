@@ -506,7 +506,7 @@ export class MatchRoom {
     if (request.headers.get("Upgrade") === "websocket") {
       const pair = new WebSocketPair(); this.state.acceptWebSocket(pair[1]); this.sockets.add(pair[1]);
       if (!this.room) await this.load();
-      if (this.room.fixture?.id && this.room.mode === "live") { await this.refreshLive(); if (!this.room.players.length && !Object.keys(this.room.predictions || {}).length) this.room.preMatch = this.buildPreMatch(); this.anchorLiveSchedule(); this.settlePreMatch(this.room.session.clock || 0); await this.save(); if (this.room.session.status === "running") await this.advance(); }
+      if (this.room.fixture?.id && this.room.mode === "live") { await this.refreshLive(); this.room.preMatch = this.repairScorerQuestions(this.room.preMatch); this.room.playerPreMatch = Object.fromEntries(Object.entries(this.room.playerPreMatch || {}).map(([playerId, questions]) => [playerId, this.repairScorerQuestions(questions)])); if (!this.room.players.length && !Object.keys(this.room.predictions || {}).length) this.room.preMatch = this.buildPreMatch(); this.anchorLiveSchedule(); this.settlePreMatch(this.room.session.clock || 0); await this.save(); if (this.room.session.status === "running") await this.advance(); }
       pair[1].send(JSON.stringify({ type: "state", state: this.public() }));
       return new Response(null, { status: 101, webSocket: pair[0] });
     }
@@ -590,6 +590,16 @@ export class MatchRoom {
   schedule(ms) { this.state.storage.setAlarm(Date.now() + Math.max(250, Math.min(ms, 7200000))); }
   lineupChoices() {
     return [...new Map((this.room.lineups || []).map(player => [player.key, { key: player.key, label: player.label, team: player.team }])).values()];
+  }
+  repairScorerQuestions(questions) {
+    const choices = this.lineupChoices();
+    return (questions || []).flatMap(question => {
+      if (question.type !== "first-goalscorer" || question.settled) return [question];
+      if (choices.length) return [{ ...question, choices }];
+      // Older rooms may have persisted the scorer question before ESPN
+      // returned line-ups. Never leave a player on an unanswerable screen.
+      return [];
+    });
   }
   buildPreMatch(lateJoin = false, playerId = "") {
     const f = this.room.fixture || {}, home = f.home?.name || "Home", away = f.away?.name || "Away";
