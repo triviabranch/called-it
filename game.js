@@ -184,6 +184,14 @@ function render() {
   const call = callLocked ? '<div class="call-locked"><span class="lock-dot"></span><b>CALL LOCKED IN</b><span>Stay with the match — the next call will land here.</span></div>' : me && r?.status === "voting" ? `<div class="call-modal-backdrop"><section class="call-modal" role="dialog" aria-label="Make your call"><a class="modal-brand" href="/" aria-label="Called It home"><img src="assets/called-it-wordmark.png" alt="Called It"></a><div class="live-kicker"><span class="live-dot"></span>FIXTURE CALL · ALL PLAYERS <span class="countdown" data-vote-countdown data-vote-ends-at="${r.voteEndsAt || 0}">${voteLabel}</span></div><h2>${esc(r.question)}</h2><p>Make your call. It stays open until the match answers it.</p><div class="answers">${(r.choices || []).map((a, index) => `<button class="answer" data-answer="${esc(a.key)}"><span class="answer-index">${String.fromCharCode(65 + index)}</span>${esc(a.label)}</button>`).join("")}</div></section></div>` : '';
   const matchFinished = state.session?.status === "complete";
   const leaderboard = `<div class="leaderboard-modal-backdrop" data-leaderboard-close><section class="leaderboard-modal" role="dialog" aria-modal="true" aria-label="Match leaderboard"><a class="modal-brand" href="/" aria-label="Called It home"><img src="assets/called-it-wordmark.png" alt="Called It"></a><div class="section-head"><h2>${matchFinished ? "Final results" : "Leaderboard"}</h2><button class="modal-close" data-leaderboard-close aria-label="Close leaderboard">×</button></div><div class="leaderboard-match"><div class="phase">${matchFinished ? "FULL TIME" : "LIVE MATCH"} · ${esc(competitionName(f))}</div><h3 class="scoreboard-teams leaderboard-scoreboard"><span><b>${esc(f.home?.name)}</b><strong>${f.home?.score ?? "–"}</strong></span><span><b>${esc(f.away?.name)}</b><strong>${f.away?.score ?? "–"}</strong></span></h3></div><p class="muted">Room results</p><div class="leaders">${(state.leaderboard || []).map(p => `<div><b>#${p.rank} ${esc(p.name)}</b><span>${p.points} pts · ${p.rounds} calls</span></div>`).join("") || '<p class="muted">No players yet.</p>'}</div><button type="button" class="secondary share-result" data-share-result>Share results</button></section></div>`;
+function scorecardGoalLines(team) {
+  const normalise = value => String(value || "").toLowerCase().replace(/\b(fc|afc|city|town|united)\b/g, "").replace(/[^a-z0-9]/g, "");
+  return (state.timeline || []).filter(event => event.type === "goal" && normalise(event.team) === normalise(team)).sort((a, b) => (a.offset || 0) - (b.offset || 0)).map(event => {
+    const scorer = event.athletes?.[0] || "";
+    return (event.minute != null ? event.minute + "'" : "—") + (scorer ? " " + scorer : "");
+  });
+}
+
 function committedCallsModal() {
   if (!callsOpen) return "";
   const players = (state.committedCalls || []).filter(player => String(player.id) === String(playerId));
@@ -203,7 +211,9 @@ function committedCallsModal() {
     }).join("");
     return `<div class="calls-player"><div class="calls-player-head"><b>${esc(player.name)}</b><small>${player.points || 0} pts · ${player.calls?.length || 0} calls</small></div>${calls || "<p class=\"muted\">No calls committed yet.</p>"}</div>`;
   }).join("");
-  return `<div class="calls-modal-backdrop" data-calls-close><section class="calls-modal" role="dialog" aria-modal="true" aria-label="${esc(callsTitle)}"><div class="section-head"><div class="calls-modal-heading"><img src="assets/called-it-wordmark.png" alt="Called It"><h2>${esc(callsTitle)}</h2></div><button class="modal-close" data-calls-close aria-label="Close calls">×</button></div><div class="calls-modal-actions"><p class="muted">Your calls in this fixture.</p><button type="button" class="share-result" data-share-result>Share calls</button></div>${playerHtml || "<p class=\"muted\">No calls committed yet.</p>"}</section></div>`;
+  const fixture = state.fixture || {}, home = fixture.home || {}, away = fixture.away || {};
+  const matchScoreboard = `<div class="modal-match-scoreboard" aria-label="Match score"><div><span><b>${esc(home.name || "Home")}</b><strong>${esc(home.score ?? "—")}</strong></span><small>${scorecardGoalLines(home.name).map(esc).join("<br>")}</small></div><div><span><b>${esc(away.name || "Away")}</b><strong>${esc(away.score ?? "—")}</strong></span><small>${scorecardGoalLines(away.name).map(esc).join("<br>")}</small></div></div>`;
+  return `<div class="calls-modal-backdrop" data-calls-close><section class="calls-modal" role="dialog" aria-modal="true" aria-label="${esc(callsTitle)}"><div class="section-head"><div class="calls-modal-heading"><img src="assets/called-it-wordmark.png" alt="Called It"><h2>${esc(callsTitle)}</h2></div><button class="modal-close" data-calls-close aria-label="Close calls">×</button></div>${matchScoreboard}<div class="calls-modal-actions"><p class="muted">Your calls in this fixture.</p><button type="button" class="share-result" data-share-result>Share calls</button></div>${playerHtml || "<p class=\"muted\">No calls committed yet.</p>"}</section></div>`;
 }
 
   const callsModal = committedCallsModal();
