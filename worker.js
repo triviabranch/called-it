@@ -212,7 +212,13 @@ async function espnApi(url) {
 
 async function validateLeague(sport, league, programme) {
   try {
-    const matches = programme.filter(event => event.status?.type?.state === "post").slice(-3);
+    const completedMatches = programme.filter(event => event.status?.type?.state === "post").slice(-3);
+    // A new competition can have live/upcoming fixtures before the rolling
+    // completed-match sample contains anything. Probe live events in that case
+    // so a valid ESPN feed is not incorrectly held.
+    const matches = completedMatches.length
+      ? completedMatches
+      : programme.filter(event => event.status?.type?.state === "in").slice(0, 3);
     const rows = await Promise.all(matches.map(async match => {
       try {
         const config = competitionConfig(sport, league);
