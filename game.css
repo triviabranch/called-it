@@ -72,3 +72,6 @@ h1,h2,.card h2,.match-header h1,.call-modal h2,.leaderboard-modal h2{font-family
 .calls-player:first-of-type{border-top:0}
 .calls-player-head{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
 .calls-player-head small{color:var(--muted);font:12px monospace}
+
+.scoreboard-teams{display:grid;gap:0;text-align:right}.scoreboard-teams span{display:flex;justify-content:flex-end;align-items:baseline;gap:.45em;min-width:0}.scoreboard-teams b{font:inherit;min-width:0;overflow-wrap:anywhere}.scoreboard-teams strong{font:inherit;flex:0 0 1.2ch;text-align:right;color:var(--paper)}
+@media(max-width:500px){.scoreboard-teams{font-size:clamp(30px,8vw,48px)}.scoreboard-teams span{gap:.35em}}
