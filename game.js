@@ -33,7 +33,7 @@ async function getFixtures(region = "") {
   const data = await response.json(); if (!response.ok) throw Error(data.error || "Fixtures unavailable"); return data;
 }
 const regionOptions = [["gb","United Kingdom"],["au","Australia"],["us","United States"],["ca","Canada"],["nz","New Zealand"],["ie","Ireland"]];
-const competitionNames = { "eng.1":"Premier League", "eng.2":"Championship", "eng.league_cup":"Carabao Cup", "eng.fa":"FA Cup", "sco.1":"Scottish Premiership", "esp.1":"LaLiga", "ger.1":"Bundesliga", "ita.1":"Serie A", "fra.1":"Ligue 1", "usa.1":"MLS", "aus.1":"A-League Men" };
+const competitionNames = { "eng.1":"Premier League", "eng.2":"Championship", "eng.league_cup":"Carabao Cup", "eng.fa":"FA Cup", "uefa.europa":"Europa League", "uefa.europa.conf":"Europa Conference League", "sco.1":"Scottish Premiership", "esp.1":"LaLiga", "ger.1":"Bundesliga", "ita.1":"Serie A", "fra.1":"Ligue 1", "usa.1":"MLS", "aus.1":"A-League Men" };
 const competitionName = fixture => fixture.competition || competitionNames[fixture.league] || fixture.league || "Competition";
 const broadcastName = fixture => [...new Set((fixture.broadcasts || []).map(item => item?.name).filter(Boolean))].join(" / ") || "Televised";
 const scheduledTime = value => value ? new Intl.DateTimeFormat("en-GB", { day:"2-digit", month:"2-digit", year:"2-digit", hour:"2-digit", minute:"2-digit", hour12:false }).format(new Date(value)).replace(",", "") : "Scheduled";
