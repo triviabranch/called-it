@@ -177,7 +177,7 @@ function committedCallsModal() {
     }).join("");
     return `<div class="calls-player"><div class="calls-player-head"><b>${esc(player.name)}</b><small>${player.points || 0} pts · ${player.calls?.length || 0} calls</small></div>${calls || "<p class=\"muted\">No calls committed yet.</p>"}</div>`;
   }).join("");
-  return `<div class="calls-modal-backdrop" data-calls-close><section class="calls-modal" role="dialog" aria-modal="true" aria-label="${esc(callsTitle)}"><div class="section-head"><div class="calls-modal-heading"><img src="assets/called-it-logo.png" alt="Called It"><h2>${esc(callsTitle)}</h2></div><button class="modal-close" data-calls-close aria-label="Close calls">×</button></div><p class="muted">Your calls in this fixture.</p>${playerHtml || "<p class=\"muted\">No calls committed yet.</p>"}</section></div>`;
+  return `<div class="calls-modal-backdrop" data-calls-close><section class="calls-modal" role="dialog" aria-modal="true" aria-label="${esc(callsTitle)}"><div class="section-head"><div class="calls-modal-heading"><img src="assets/called-it-wordmark.png" alt="Called It"><h2>${esc(callsTitle)}</h2></div><button class="modal-close" data-calls-close aria-label="Close calls">×</button></div><p class="muted">Your calls in this fixture.</p>${playerHtml || "<p class=\"muted\">No calls committed yet.</p>"}</section></div>`;
 }
 
   const callsModal = committedCallsModal();
