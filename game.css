@@ -197,3 +197,8 @@ h1,h2,.card h2,.match-header h1,.call-modal h2,.leaderboard-modal h2{font-family
 .scoreboard-goal-list{margin-top:1px;line-height:1.2}
 .match-header + .player-score-stats{margin-top:-8px;position:relative;z-index:2}
 @media(max-width:500px){.match-header + .player-score-stats{margin-top:-6px}.scoreboard-goal-list{line-height:1.15}}
+
+/* Keep the scoreboard, player scores and feed contiguous */
+.match-header + .player-score-stats{margin-top:0}
+.player-score-stats{margin-bottom:0}
+.player-score-stats + .broadcast-feed{margin-top:0}
