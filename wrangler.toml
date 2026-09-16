@@ -25,5 +25,3 @@ new_sqlite_classes = ["MatchRoom"]
 tag = "v2"
 new_sqlite_classes = ["FixtureIndex"]
 
-[triggers]
-crons = ["*/5 * * * *"]
