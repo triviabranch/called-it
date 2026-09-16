@@ -871,8 +871,8 @@ export class MatchRoom {
       this.settlePreMatch(s.clock);
       if (String(this.room.fixture?.state || "").toLowerCase() === "post") { await this.finishLiveSession(); return; }
       const fixtureState = String(this.room.fixture?.state || "").toLowerCase(), fixtureStatus = String(this.room.fixture?.status || ""), hasLiveTimeline = this.room.timeline.some(event => event.offset != null); const fixtureIsLive = fixtureState === "in" || (fixtureState !== "post" && hasLiveTimeline), fixtureIsAtHalfTime = /half[\s-]?time|end of (the )?1st half|\bHT\b|\binterval\b/i.test(fixtureStatus); if (s.status === "running" && fixtureIsLive && Date.now() >= (s.nextQuestionAt || 0)) { if (fixtureIsAtHalfTime) { while (s.nextQuestionAt && s.nextQuestionAt <= Date.now()) s.nextQuestionAt += LIVE_CALL_INTERVAL_MS; await this.save(); this.broadcast(); this.schedule(LIVE_PROVIDER_POLL_MS); return; } await this.openLiveRound(); return; }
-      const openRounds = [...(s.rounds || []), s.round].filter(round => round?.status === "voting");
-      const resolvedRound = openRounds.find(round => this.room.timeline.some(e => !(round.baselineEventIds || []).includes(e.id) && e.type === round.targetType) || this.room.fixture.state === "post");
+      const openRounds = [...(s.rounds || []), s.round].filter(round => round?.status === "voting" || round?.status === "locked");
+      const resolvedRound = openRounds.find(round => this.eventForLiveRound(round) || this.room.fixture.state === "post");
       if (resolvedRound) { await this.settleLiveRound(resolvedRound); return; }
       if (s.status === "complete") return;
       await this.save(); this.broadcast(); this.schedule(Math.min(LIVE_PROVIDER_POLL_MS, Math.max(250, (s.nextQuestionAt || Date.now() + LIVE_PROVIDER_POLL_MS) - Date.now()))); return;
@@ -900,8 +900,16 @@ export class MatchRoom {
     this.room.events.unshift({ label: correct ? "Prediction settled" : "Prediction settled", detail: round.result.event });
     await this.save(); this.broadcast(); this.schedule(1500);
   }
+  eventForLiveRound(round) {
+    const baseline = new Set((round.baselineEventIds || []).map(String));
+    return this.room.timeline.find(event => {
+      if (String(event.type) !== String(round.targetType)) return false;
+      if (baseline.has(String(event.id))) return false;
+      return round.presentedAtClock == null || Number(event.offset) > Number(round.presentedAtClock);
+    }) || null;
+  }
   async settleLiveRound(round) {
-    const baseline = new Set(round.baselineEventIds || []), target = this.room.timeline.find(e => !baseline.has(e.id) && e.type === round.targetType);
+    const target = this.eventForLiveRound(round);
     const correct = target ? this.keyForQuestion({ type: "first-goal-team" }, target) : null;
     round.result = { correct, event: target?.text || `No ${round.targetType} recorded during the call`, eventId: target?.id || null }; round.status = "settled";
     for (const p of this.room.players) { const answer = this.room.predictions[p.id]?.[round.id]; if (answer) p.calls = (p.calls || 0) + 1; if (correct && answer === correct) { p.points = (p.points || 0) + 100; p.correct = (p.correct || 0) + 1; } if (answer) p.rounds = (p.rounds || 0) + 1; }
