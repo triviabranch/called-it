@@ -111,3 +111,15 @@ h1,h2,.card h2,.match-header h1,.call-modal h2,.leaderboard-modal h2{font-family
   .call-main{grid-template-columns:minmax(0,1fr) minmax(0,auto)}
   .call-main .call-answer{text-align:right}
 }
+
+/* Committed calls: clean primary row and secondary status line */
+.calls-modal .section-head{position:sticky;top:-20px}
+.call-row{position:relative}
+.call-meta{width:100%;justify-content:space-between!important;text-align:left}
+.call-status-icon.correct{width:24px!important;flex-basis:24px!important;height:24px!important;padding:0!important;border:0!important;transform:none!important;box-shadow:none!important;background:transparent!important}
+.call-status-icon.correct img{width:24px;height:24px;object-fit:contain}
+@media(max-width:500px){
+  .call-meta{justify-content:space-between!important}
+  .call-status-icon.correct{width:22px!important;flex-basis:22px!important;height:22px!important}
+  .call-status-icon.correct img{width:22px;height:22px}
+}
