@@ -241,10 +241,12 @@ function committedCallsModal() {
       const status = String(call.status || "").toLowerCase();
       const phase = String(call.matchTime || "—").replace("BEFORE KICK-OFF", "PRE-MATCH");
       const statusImage = "assets/called-it-square.png";
-      const statusMark = status === "committed" || status === "correct"
-        ? `<span class="call-result-label ${status}">${status === "correct" ? "<b>100 pts</b>" : ""}<span class="call-status call-status-icon ${status}" title="${esc(call.status)}" aria-label="${esc(call.status)}"><img src="${statusImage}" alt="${esc(call.status)}"></span></span>`
-        : `<span class="call-status ${status}">${esc(call.status)}</span>`;
-      return `<div class="call-row ${status === "correct" ? "call-correct" : ""}">
+      const statusMark = status === "correct"
+        ? `<span class="call-result-label correct"><img class="call-correct-logo" src="assets/called-it-wordmark.png" alt="Called It"><b>100 pts</b></span>`
+        : status === "committed"
+          ? `<span class="call-result-label committed"><span class="call-status call-status-icon committed" title="${esc(call.status)}" aria-label="${esc(call.status)}"><img src="${statusImage}" alt="${esc(call.status)}"></span></span>`
+          : `<span class="call-status ${status}">${esc(call.status)}</span>`;
+      return `<div class="call-row">
         <div class="call-main"><span class="call-question">${esc(call.question)}</span><span class="call-answer">${esc(call.answer)}</span></div>
         <div class="call-meta"><span class="call-time">${esc(phase)}</span>${statusMark}</div>
       </div>`;
