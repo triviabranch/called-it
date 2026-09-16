@@ -659,7 +659,12 @@ export class MatchRoom {
       const now = Date.now();
       const coreItems = core.status === "fulfilled" ? (core.value.items || []) : [];
       const source = coreItems.length ? "core-live" : "summary-live-fallback";
-      const incoming = (coreItems.length ? coreItems : (data.plays || [])).map((p, i) => normaliseEvent(p, i, source)).filter(e => e.offset != null && e.type !== "other");
+      // Core polling can return only the newest page while ESPN summary still
+      // contains earlier scoring plays. Merge both so the scoreboard cannot
+      // know the score without also retaining the scorer event.
+      const incoming = [...coreItems.map((item, index) => normaliseEvent(item, index, source)), ...(data.plays || []).map((item, index) => normaliseEvent(item, index, "summary-live"))]
+        .filter(event => event.offset != null && event.type !== "other")
+        .filter((event, index, events) => events.findIndex(candidate => `${candidate.type}|${candidate.offset}|${candidate.text}` === `${event.type}|${event.offset}|${event.text}`) === index);
       const known = new Set(this.room.timeline.map(e => e.id));
       for (const e of incoming) if (!known.has(e.id)) { this.room.timeline.push({ id: e.id, type: e.type, offset: e.offset, minute: e.minute, text: e.text, team: e.team || null, athletes: e.athletes || [] }); this.room.events.unshift({ label: e.type === "goal" ? "GOAL" : "Match update", detail: e.text }); }
       this.room.timeline.sort((a, b) => a.offset - b.offset);
