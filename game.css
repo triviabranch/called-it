@@ -202,3 +202,12 @@ h1,h2,.card h2,.match-header h1,.call-modal h2,.leaderboard-modal h2{font-family
 .match-header + .player-score-stats{margin-top:0}
 .player-score-stats{margin-bottom:0}
 .player-score-stats + .broadcast-feed{margin-top:0}
+
+.modal-match-scoreline{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:baseline;gap:10px;margin:4px 0 0;padding:10px 0;border-top:1px solid #bdb29d}
+.modal-match-scoreline b{min-width:0;font-size:clamp(15px,2.8vw,22px);overflow-wrap:anywhere}
+.modal-match-scoreline b:last-child{text-align:right}
+.modal-match-scoreline strong{font-size:clamp(20px,3.2vw,28px);white-space:nowrap}
+.modal-match-scorers{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:3px 0 10px;border-bottom:1px solid #bdb29d}
+.modal-match-scorers small{min-height:1.1em;color:var(--muted);font:11px/1.35 monospace;overflow-wrap:anywhere}
+.modal-match-scorers small:last-child{text-align:right}
+@media(max-width:500px){.modal-match-scoreline{gap:6px}.modal-match-scoreline b{font-size:14px}.modal-match-scoreline strong{font-size:21px}.modal-match-scorers{gap:8px}}
