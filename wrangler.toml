@@ -26,4 +26,4 @@ tag = "v2"
 new_sqlite_classes = ["FixtureIndex"]
 
 [triggers]
-crons = ["17 3 * * *"]
+crons = ["*/5 * * * *"]
