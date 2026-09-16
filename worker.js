@@ -170,7 +170,7 @@ function normaliseEvent(item, index, source) {
   const providerClock = String(item?.clock?.displayValue || item?.displayValue || item?.time?.displayValue || "").match(/^(\d{1,3})\s*['’]/);
   const textClock = String(text).match(/\bat\s+(\d{1,3})['’]/i);
   const minute = providerClock ? Number(providerClock[1]) : textClock ? Number(textClock[1]) : (offset == null ? null : Math.floor(offset / 60));
-  const participantRows = [item?.participants, item?.athletes, item?.scorers, item?.scoringPlayers].flatMap(value => Array.isArray(value) ? value : value ? [value] : []);
+  const participantRows = [item?.participants, item?.athletes, item?.scorers, item?.scoringPlayers, item?.scoringPlayer, item?.goalScorer, item?.scorer].flatMap(value => Array.isArray(value) ? value : value ? [value] : []);
   const athletes = [...new Set(participantRows.map(player => {
     const athlete = player?.athlete || player?.player || player;
     return athlete?.displayName || athlete?.fullName || athlete?.shortName || athlete?.name || (typeof athlete === "string" ? athlete : "");
