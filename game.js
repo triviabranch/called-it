@@ -242,7 +242,7 @@ function committedCallsModal() {
       const phase = String(call.matchTime || "—").replace("BEFORE KICK-OFF", "PRE-MATCH");
       const statusImage = "assets/called-it-square.png";
       const statusMark = status === "correct"
-        ? `<span class="call-result-label correct"><img class="call-correct-logo" src="assets/called-it-wordmark.png" alt="Called It"><b>100 pts</b></span>`
+        ? `<span class="call-result-label correct"><img class="call-correct-logo" src="assets/called-it-wordmark.png" alt="Called It" width="52" height="18" style="display:block;width:52px!important;max-width:52px!important;height:auto!important;max-height:18px!important;object-fit:contain!important;"><b>100 pts</b></span>`
         : status === "committed"
           ? `<span class="call-result-label committed"><span class="call-status call-status-icon committed" title="${esc(call.status)}" aria-label="${esc(call.status)}"><img src="${statusImage}" alt="${esc(call.status)}"></span></span>`
           : `<span class="call-status ${status}">${esc(call.status)}</span>`;
