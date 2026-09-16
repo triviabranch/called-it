@@ -168,3 +168,15 @@ h1,h2,.card h2,.match-header h1,.call-modal h2,.leaderboard-modal h2{font-family
 
 .call-result-label{display:inline-flex;align-items:center;gap:6px;margin-left:auto;color:var(--red);font:700 11px monospace;white-space:nowrap}
 .call-result-label .call-status-icon{margin-left:0}
+
+/* Live scoreboard: marker in the corner, one clock, scorers below teams */
+.match-header{padding-top:42px}
+.scoreboard-live-marker{position:absolute;top:16px;right:20px;z-index:2;display:flex;align-items:center;gap:8px;color:var(--yellow);font:700 11px monospace;letter-spacing:.08em;text-transform:uppercase}
+.scoreboard-live-marker .live-dot{width:8px;height:8px}
+.scoreboard-teams{text-align:left!important}
+.scoreboard-teams span{display:grid!important;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;justify-content:initial!important;align-items:baseline;column-gap:.45em;row-gap:2px}
+.scoreboard-teams b{grid-column:1;grid-row:1;min-width:0;text-align:left}
+.scoreboard-teams strong{grid-column:2;grid-row:1;text-align:right}
+.scoreboard-teams .scoreboard-goal-list{grid-column:1 / -1;grid-row:2;text-align:left}
+.match-header p.match-clock{margin-top:18px}
+@media(max-width:500px){.match-header{padding-top:38px}.scoreboard-live-marker{top:13px;right:14px}.match-header p.match-clock{margin-top:14px}}
