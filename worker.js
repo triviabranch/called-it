@@ -170,7 +170,13 @@ function normaliseEvent(item, index, source) {
   const providerClock = String(item?.clock?.displayValue || item?.displayValue || item?.time?.displayValue || "").match(/^(\d{1,3})\s*['’]/);
   const textClock = String(text).match(/\bat\s+(\d{1,3})['’]/i);
   const minute = providerClock ? Number(providerClock[1]) : textClock ? Number(textClock[1]) : (offset == null ? null : Math.floor(offset / 60));
-  return { id: String(item?.id || (source + "-" + index)), source, type: eventType(item), offset, minute, period: item?.period?.number || item?.period?.displayValue || null, text, athletes: (item?.participants || item?.athletes || []).map(p => p?.athlete?.displayName || p?.displayName).filter(Boolean), team: item?.team?.displayName || item?.team?.shortDisplayName || null, raw: item };
+  const participantRows = [item?.participants, item?.athletes, item?.scorers, item?.scoringPlayers].flatMap(value => Array.isArray(value) ? value : value ? [value] : []);
+  const athletes = [...new Set(participantRows.map(player => {
+    const athlete = player?.athlete || player?.player || player;
+    return athlete?.displayName || athlete?.fullName || athlete?.shortName || athlete?.name || (typeof athlete === "string" ? athlete : "");
+  }).filter(Boolean))];
+  const team = item?.team?.displayName || item?.team?.shortDisplayName || item?.team?.name || item?.competitor?.team?.displayName || item?.competitor?.displayName || null;
+  return { id: String(item?.id || (source + "-" + index)), source, type: eventType(item), offset, minute, period: item?.period?.number || item?.period?.displayValue || null, text, athletes, team, raw: item };
 }
 function normaliseCorePlay(item, index) { return normaliseEvent({ ...item, text: item.text || item.shortText || item.alternativeText || item.type?.text }, index, "core-play"); }
 function normaliseCommentary(item, index) { const play = item?.play || item; return normaliseEvent({ ...play, clock: play.clock || item.time, text: item.text || play.text || play.shortText }, index, "commentary"); }
@@ -662,7 +668,8 @@ export class MatchRoom {
       // Core polling can return only the newest page while ESPN summary still
       // contains earlier scoring plays. Merge both so the scoreboard cannot
       // know the score without also retaining the scorer event.
-      const incoming = [...coreItems.map((item, index) => normaliseEvent(item, index, source)), ...(data.plays || []).map((item, index) => normaliseEvent(item, index, "summary-live"))]
+      const summaryItems = [...(data.plays || []), ...(data.scoringPlays || []), ...(data.keyEvents || [])];
+      const incoming = [...coreItems.map((item, index) => normaliseEvent(item, index, source)), ...summaryItems.map((item, index) => normaliseEvent(item, index, "summary-live"))]
         .filter(event => event.offset != null && event.type !== "other")
         .filter((event, index, events) => events.findIndex(candidate => `${candidate.type}|${candidate.offset}|${candidate.text}` === `${event.type}|${event.offset}|${event.text}`) === index);
       const known = new Set(this.room.timeline.map(e => e.id));
