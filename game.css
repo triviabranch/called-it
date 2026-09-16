@@ -216,3 +216,7 @@ h1,h2,.card h2,.match-header h1,.call-modal h2,.leaderboard-modal h2{font-family
 
 .calls-modal-footer{display:flex;justify-content:flex-end;margin-top:14px;padding-top:12px;border-top:1px solid #bdb29d}
 .share-icon{display:grid!important;place-items:center;width:38px!important;height:38px!important;margin:0!important;padding:0!important;font:22px/1 Arial!important}
+
+.calls-score-hero{display:flex;align-items:baseline;gap:10px;margin:0 0 12px;color:var(--red)}
+.calls-score-hero strong{font:700 clamp(42px,9vw,72px)/.9 monospace}
+.calls-score-hero span{font:700 12px monospace;letter-spacing:.1em}
