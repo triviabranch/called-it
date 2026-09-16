@@ -124,3 +124,6 @@ h1,h2,.card h2,.match-header h1,.call-modal h2,.leaderboard-modal h2{font-family
   .call-status-icon.correct img{width:22px;height:22px}
 }
 \n/* Calls modal header branding */\n.calls-modal .section-head{align-items:center}\n.calls-modal-heading{display:flex;align-items:center;gap:9px;min-width:0}\n.calls-modal-heading img{display:block;width:30px;height:30px;object-fit:contain;flex:0 0 30px}\n.calls-modal-heading h2{margin:0;min-width:0}\n
+/* Rectangular logo, compactly fitted to the calls header */
+.calls-modal-heading img{width:min(118px,38vw);height:auto;max-height:30px;object-fit:contain;flex:0 1 118px}
+@media(max-width:500px){.calls-modal-heading img{width:min(104px,34vw);max-height:26px;flex-basis:104px}}
