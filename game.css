@@ -220,3 +220,9 @@ h1,h2,.card h2,.match-header h1,.call-modal h2,.leaderboard-modal h2{font-family
 .calls-score-hero{display:flex;align-items:baseline;gap:10px;margin:0 0 12px;color:var(--red)}
 .calls-score-hero strong{font:700 clamp(42px,9vw,72px)/.9 monospace}
 .calls-score-hero span{font:700 12px monospace;letter-spacing:.1em}
+
+.calls-score-hero{justify-content:center;text-align:center}
+.calls-modal .call-correct{background:transparent;border-left:0}
+.calls-modal .call-result-label.correct{display:inline-flex;align-items:center;gap:7px}
+.calls-modal .call-correct-logo{display:block;width:52px;height:auto;max-height:18px;object-fit:contain}
+.calls-modal .call-result-label.correct b{font:700 11px monospace;white-space:nowrap}
