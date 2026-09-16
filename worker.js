@@ -469,6 +469,14 @@ export class FixtureIndex {
         const next = [completed, ...completedFixtures.filter(item => String(item.id) !== String(completed.id))]
           .filter(item => Date.now() - Number(item.completedAt || 0) < 24 * 60 * 60 * 1000);
         await this.state.storage.put("completedFixtures", next);
+        for (const region of BROADCAST_REGIONS.map(item => item.code)) {
+          const index = await this.state.storage.get(`index:${region}`);
+          if (index) {
+            index.fixtures = (index.fixtures || []).filter(item => String(item.id) !== String(completed.id));
+            index.completedFixtures = next;
+            await this.state.storage.put(`index:${region}`, index);
+          }
+        }
         return json({ saved: true, fixture: completed });
       } catch (error) { return json({ error: error.message || "Could not archive completed fixture" }, 400); }
     }
