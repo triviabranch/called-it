@@ -672,8 +672,32 @@ export class MatchRoom {
       const incoming = [...coreItems.map((item, index) => normaliseEvent(item, index, source)), ...summaryItems.map((item, index) => normaliseEvent(item, index, "summary-live"))]
         .filter(event => event.offset != null && event.type !== "other")
         .filter((event, index, events) => events.findIndex(candidate => `${candidate.type}|${candidate.offset}|${candidate.text}` === `${event.type}|${event.offset}|${event.text}`) === index);
-      const known = new Set(this.room.timeline.map(e => e.id));
-      for (const e of incoming) if (!known.has(e.id)) { this.room.timeline.push({ id: e.id, type: e.type, offset: e.offset, minute: e.minute, text: e.text, team: e.team || null, athletes: e.athletes || [] }); this.room.events.unshift({ label: e.type === "goal" ? "GOAL" : "Match update", detail: e.text }); }
+      const byId = new Map(this.room.timeline.map(event => [String(event.id), event]));
+      const byShape = new Map(this.room.timeline.map(event => [`${event.type}|${event.offset}|${event.text}`, event]));
+      for (const event of incoming) {
+        const key = `${event.type}|${event.offset}|${event.text}`;
+        const existing = byId.get(String(event.id)) || byShape.get(key);
+        if (existing) {
+          // ESPN may enrich the same play on a later poll with its team or
+          // athlete. Update the canonical event instead of dropping it.
+          Object.assign(existing, {
+            type: event.type,
+            offset: event.offset,
+            minute: event.minute ?? existing.minute,
+            text: event.text || existing.text,
+            team: event.team || existing.team || null,
+            athletes: event.athletes?.length ? event.athletes : (existing.athletes || [])
+          });
+          byId.set(String(event.id), existing);
+          byShape.set(key, existing);
+          continue;
+        }
+        const canonical = { id: event.id, type: event.type, offset: event.offset, minute: event.minute, text: event.text, team: event.team || null, athletes: event.athletes || [] };
+        this.room.timeline.push(canonical);
+        byId.set(String(event.id), canonical);
+        byShape.set(key, canonical);
+        this.room.events.unshift({ label: event.type === "goal" ? "GOAL" : "Match update", detail: event.text });
+      }
       this.room.timeline.sort((a, b) => a.offset - b.offset);
       const homeName = String(this.room.fixture.home?.name || "").toLowerCase();
       const awayName = String(this.room.fixture.away?.name || "").toLowerCase();
