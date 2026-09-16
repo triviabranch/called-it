@@ -71,31 +71,44 @@ async function shareCallsCard() {
   const calls = state.committedCalls?.find(player => String(player.id) === String(playerId))?.calls || [];
   const correct = me?.correct || calls.filter(call => String(call.status).toLowerCase() === "correct").length;
   const total = calls.length || me?.calls || 0;
-  const message = `I Called It!
-${correct}/${total} correct whilst watching
-${home} vs ${away}
+  const message = \`I Called It!
+\${correct}/\${total} correct whilst watching
+\${home} vs \${away}
 
 Play along with live matches at
-Called-it.triviabranch.com`;
-  const canvas = document.createElement("canvas"), ctx = canvas.getContext("2d");
-  canvas.width = 1080; canvas.height = 1350;
+Called-it.triviabranch.com\`;
+  const fit = value => String(value ?? "").length > 44 ? String(value ?? "").slice(0, 42) + "…" : String(value ?? "");
+  const rowHeight = 92, canvas = document.createElement("canvas"), ctx = canvas.getContext("2d");
+  canvas.width = 1080;
+  canvas.height = Math.max(1350, 820 + calls.length * rowHeight);
   ctx.fillStyle = "#f4eddf"; ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = "#07182d"; ctx.fillRect(0, 0, canvas.width, 230);
   ctx.fillStyle = "#ed5b4f"; ctx.fillRect(0, 230, canvas.width, 12);
   const logo = new Image(); logo.src = "assets/called-it-wordmark.png"; await new Promise(resolve => { logo.onload = resolve; logo.onerror = resolve; });
   if (logo.naturalWidth) ctx.drawImage(logo, 72, 62, 300, 86); else { ctx.fillStyle = "#f4eddf"; ctx.font = "700 58px Arial"; ctx.fillText("CALLED IT.", 72, 115); }
   ctx.font = "700 28px monospace"; ctx.fillStyle = "#edb33f"; ctx.fillText("MY MATCH SCORECARD", 72, 175);
-  ctx.fillStyle = "#07182d"; ctx.font = "700 86px Georgia"; ctx.fillText(`${correct}/${total}`, 72, 365);
-  ctx.font = "700 28px monospace"; ctx.fillStyle = "#ed5b4f"; ctx.fillText("CORRECT CALLS", 78, 415);
-  ctx.fillStyle = "#07182d"; ctx.font = "700 42px Arial";
-  const fit = value => String(value).length > 30 ? String(value).slice(0, 28) + "…" : String(value);
-  ctx.fillText(fit(`${home} ${fixture.home?.score ?? "—"}–${fixture.away?.score ?? "—"} ${away}`), 72, 535);
-  ctx.strokeStyle = "#bdb29d"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(72, 590); ctx.lineTo(1008, 590); ctx.stroke();
-  ctx.fillStyle = "#07182d"; ctx.font = "700 30px monospace"; ctx.fillText("I CALLED IT!", 72, 685);
-  ctx.font = "26px Arial"; let y = 745;
-  for (const call of calls.slice(0, 6)) { ctx.fillText(fit(call.question || "Call"), 72, y); ctx.fillStyle = "#ed5b4f"; ctx.textAlign = "right"; ctx.fillText(fit(call.answer || ""), 1008, y); ctx.textAlign = "left"; y += 70; }
-  ctx.fillStyle = "#07182d"; ctx.font = "700 26px monospace"; ctx.fillText("PLAY ALONG WITH LIVE MATCHES AT", 72, 1210);
-  ctx.fillStyle = "#ed5b4f"; ctx.font = "700 30px Arial"; ctx.fillText("Called-it.triviabranch.com", 72, 1265);
+  ctx.fillStyle = "#ed5b4f"; ctx.font = "700 76px Arial"; ctx.fillText(\`\${correct}/\${total}\`, 72, 365);
+  ctx.font = "700 26px monospace"; ctx.fillText("CORRECT CALLS", 78, 415);
+  ctx.fillStyle = "#07182d"; ctx.font = "700 40px Arial";
+  ctx.fillText(fit(\`\${home} \${fixture.home?.score ?? "—"}–\${fixture.away?.score ?? "—"} \${away}\`), 72, 520);
+  const homeGoals = (state.timeline || []).filter(event => event.type === "goal" && String(event.team || "").toLowerCase().includes(String(home).toLowerCase().split(" ")[0])).map(event => \`\${event.minute ?? "—"}' \${event.athletes?.[0] || ""}\`);
+  const awayGoals = (state.timeline || []).filter(event => event.type === "goal" && String(event.team || "").toLowerCase().includes(String(away).toLowerCase().split(" ")[0])).map(event => \`\${event.minute ?? "—"}' \${event.athletes?.[0] || ""}\`);
+  ctx.fillStyle = "#596576"; ctx.font = "22px Arial";
+  ctx.fillText(fit(homeGoals.join(" · ")), 72, 570);
+  ctx.textAlign = "right"; ctx.fillText(fit(awayGoals.join(" · ")), 1008, 570); ctx.textAlign = "left";
+  ctx.strokeStyle = "#bdb29d"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(72, 625); ctx.lineTo(1008, 625); ctx.stroke();
+  ctx.fillStyle = "#07182d"; ctx.font = "700 30px monospace"; ctx.fillText("I CALLED IT!", 72, 700);
+  let y = 770;
+  for (const call of calls) {
+    ctx.fillStyle = "#07182d"; ctx.font = "26px Arial"; ctx.fillText(fit(call.question || "Call"), 72, y);
+    ctx.textAlign = "right"; ctx.font = "700 25px Arial"; ctx.fillText(fit(call.answer || ""), 1008, y); ctx.textAlign = "left";
+    ctx.fillStyle = "#ed5b4f"; ctx.font = "700 21px monospace"; ctx.fillText(String(call.matchTime || "IN PLAY").replace("BEFORE KICK-OFF", "PRE-MATCH"), 72, y + 34);
+    if (String(call.status).toLowerCase() === "correct") { ctx.textAlign = "right"; ctx.fillText(\`\${call.points || 100} PTS · CORRECT\`, 1008, y + 34); ctx.textAlign = "left"; }
+    ctx.strokeStyle = "#d2cabb"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(72, y + 55); ctx.lineTo(1008, y + 55); ctx.stroke();
+    y += rowHeight;
+  }
+  ctx.fillStyle = "#07182d"; ctx.font = "700 24px monospace"; ctx.fillText("PLAY ALONG WITH LIVE MATCHES AT", 72, y + 40);
+  ctx.fillStyle = "#ed5b4f"; ctx.font = "700 28px Arial"; ctx.fillText("Called-it.triviabranch.com", 72, y + 88);
   const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
   if (!blob) throw new Error("Scorecard image unavailable");
   const file = new File([blob], "called-it-scorecard.png", { type: "image/png" });
