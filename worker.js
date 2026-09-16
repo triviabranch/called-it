@@ -252,14 +252,15 @@ async function removeFixtureFromIndex(env, eventId) {
 }
 async function liveFixtures(env) {
   const id = env.FIXTURE_INDEX.idFromName("supported-fixtures");
-  let response = await env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/fixtures");
+  // The fixture page is the discovery surface. Pull the current programme when
+  // it is opened so today's fixtures do not depend on the background cron.
+  let response = await refreshFixtureIndex(env);
   let data = await response.json();
-  // The fixture catalogue is programme data. Active rooms own live status and
-  // remove themselves from this index when full time is authoritatively received.
-  const missingIndex = response.status === 404;
-  const staleSchema = data.fixtureIndexVersion !== 3 || data.windowMinutes !== 120 || data.catalogueWindowMinutes !== 2880 || !Array.isArray(data.enabledCompetitions);
-  const staleIndex = !Number.isFinite(Number(data.fetchedAt)) || Date.now() - Number(data.fetchedAt) > FIXTURE_INDEX_REFRESH_MAX_AGE_MS;
-  if (missingIndex || staleSchema || staleIndex) { await refreshFixtureIndex(env); response = await env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/fixtures"); data = await response.json(); }
+  // If ESPN is temporarily unavailable, retain the last known catalogue.
+  if (!response.ok) {
+    response = await env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/fixtures");
+    data = await response.json();
+  }
   const now = Date.now(), horizon = now + 2 * 60 * 60 * 1000, staleCutoff = now - 5 * 3600000;
   data.fixtures = (data.fixtures || []).filter(item => {
     const kickoff = new Date(item.date || 0).getTime();
@@ -344,7 +345,11 @@ export class FixtureIndex {
         const enabledCompetitions = normaliseEnabledCompetitions(input.enabledCompetitions);
         await this.state.storage.put("fixtureConfig", { broadcastRules, enabledCompetitions });
         await this.state.storage.put("broadcastRules", broadcastRules);
-        return json({ broadcastRules, enabledCompetitions, saved: true });
+        // Persist the selection and rebuild the catalogue in the same action,
+        // so the next page load immediately reflects every selected competition.
+        const index = await pullFixtures(broadcastRules, enabledCompetitions);
+        await this.state.storage.put("index", index);
+        return json({ ...index, broadcastRules, enabledCompetitions, saved: true });
       } catch (error) { return json({ error: error.message || "Could not save fixture configuration" }, 400); }
     }
     if (request.method === "POST" && new URL(request.url).pathname === "/remove") {
