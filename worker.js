@@ -288,7 +288,7 @@ async function pullFixtures(broadcastRules = DEFAULT_BROADCAST_RULES, enabledCom
   // that are still outside that window so they can appear as kick-off nears
   // without waiting for another scheduled refresh.
   const horizon = now + 48 * 60 * 60 * 1000;
-  const fixtures = programmes.flatMap(result => result.status === "fulfilled"
+  const published = programmes.flatMap(result => result.status === "fulfilled"
     ? result.value.events.map(item => {
         const config = competitionConfig(result.value.sport, result.value.league);
         const parsed = fixture(item);
@@ -296,18 +296,23 @@ async function pullFixtures(broadcastRules = DEFAULT_BROADCAST_RULES, enabledCom
         return { ...parsed, televised: broadcasts.length > 0, broadcasts, sport: config.sport, league: config.league, competition: config.name };
       })
     : []).filter(f => {
-      const kickoff = new Date(f.date || 0).getTime();
-      const isLive = f.state === "in";
-      const isUpcoming = f.state === "pre" && Number.isFinite(kickoff) && kickoff >= now && kickoff <= horizon;
       const coverageKey = `${f.sport}:${f.league}`;
-      return (isLive || isUpcoming) && f.televised === true && coverage[coverageKey]?.approved
+      return f.televised === true && coverage[coverageKey]?.approved
         && (!broadcastRules.ukPremierLeagueSaturdayBlackout || f.league !== "eng.1" || !inUkSaturdayClosedPeriod(f.date));
-    }).sort((a, b) => {
-      const byKickoff = new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime();
-      if (byKickoff) return byKickoff;
-      const byCompetition = (LEAGUE_HIERARCHY[a.league] ?? 999) - (LEAGUE_HIERARCHY[b.league] ?? 999);
-      return byCompetition || a.name.localeCompare(b.name);
     });
+  const fixtures = published.filter(f => {
+    const kickoff = new Date(f.date || 0).getTime();
+    const isLive = f.state === "in";
+    const isUpcoming = f.state === "pre" && Number.isFinite(kickoff) && kickoff >= now && kickoff <= horizon;
+    return isLive || isUpcoming;
+  }).sort((a, b) => {
+    const byKickoff = new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime();
+    if (byKickoff) return byKickoff;
+    const byCompetition = (LEAGUE_HIERARCHY[a.league] ?? 999) - (LEAGUE_HIERARCHY[b.league] ?? 999);
+    return byCompetition || a.name.localeCompare(b.name);
+  });
+  const completedFixtures = published.filter(f => f.state === "post" && dateKey(f.date) === dateKey(now))
+    .sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime());
   return { provider: "ESPN", fixtureIndexVersion: 4, fetchedAt: now, region: selectedRegion, regionLabel: regionInfo(selectedRegion).label, fixtures, leagueCoverage: coverage, broadcastRules, enabledCompetitions: [...enabled], windowMinutes: 120, catalogueWindowMinutes: 2880 };
 }
 async function refreshFixtureIndex(env, region = "gb") {
