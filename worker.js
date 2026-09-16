@@ -606,7 +606,7 @@ export class MatchRoom {
       : null;
     return [
       { id: (nextGoal ? "next-goal-team" : "first-goal-team") + suffix, type: nextGoal ? "next-goal-team" : "first-goal-team", question: nextGoal ? "Which team scores next?" : "Which team scores first?", choices: [{ key: "home", label: home }, { key: "away", label: away }], settled: false, result: null, afterOffset: after(nextGoal, "goal"), baselineEventIds },
-      ...(lateJoin ? [] : [{ id: "first-goalscorer", type: "first-goalscorer", question: "Who scores first?", choices: this.lineupChoices(), settled: false, result: null, afterOffset: null, baselineEventIds }]),
+      ...((lateJoin || !this.lineupChoices().length) ? [] : [{ id: "first-goalscorer", type: "first-goalscorer", question: "Who scores first?", choices: this.lineupChoices(), settled: false, result: null, afterOffset: null, baselineEventIds }]),
       { id: (nextGoalKick ? "next-goal-kick-time" : "first-goal-kick-time") + suffix, type: nextGoalKick ? "next-goal-kick-time" : "first-goal-kick-time", question: nextGoalKick ? "What’s the time of the next goal kick?" : "What’s the time of the first goal kick?", input: { min: 0, max: 120, step: 1, value: currentMinutes, suffix: "minutes", lateJoin: nextGoalKick }, choices: [], settled: false, result: null, afterOffset: after(nextGoalKick, "goal-kick"), baselineEventIds },
       { id: (nextFoul ? "next-foul-team" : "first-foul-team") + suffix, type: nextFoul ? "next-foul-team" : "first-foul-team", question: nextFoul ? "Which team commits the next foul?" : "Which team commits the first foul?", choices: [{ key: "home", label: home }, { key: "away", label: away }], settled: false, result: null, afterOffset: after(nextFoul, "foul"), baselineEventIds }
     ];
@@ -634,13 +634,17 @@ export class MatchRoom {
       const competition = data.header?.competitions?.[0] || data.competitions?.[0] || {};
       const nextFixture = fixture({ id, name: competition.shortName || competition.name, date: competition.date || this.room.fixture.date, competitions: [{ ...competition, competitors: competition.competitors || [] }], status: competition.status });
       this.room.fixture = { ...this.room.fixture, ...nextFixture, home: { ...this.room.fixture.home, ...nextFixture.home }, away: { ...this.room.fixture.away, ...nextFixture.away } };
-      const rosterRows = data.rosters || data.lineups || [];
-      const lineups = rosterRows.flatMap(row => (row.roster || row.players || []).map(item => {
-        const athlete = item.athlete || item.player || item;
-        const label = athlete.displayName || athlete.fullName || athlete.shortName;
-        const team = row.team?.displayName || row.team?.shortDisplayName || "";
-        return label ? { key: "player:" + String(label).toLowerCase().replace(/[^a-z0-9]/g, ""), label, team } : null;
-      })).filter(Boolean);
+      const rosterSource = data.rosters || data.lineups || data.boxscore?.rosters || [];
+      const rosterRows = Array.isArray(rosterSource) ? rosterSource : Object.values(rosterSource || {});
+      const lineups = rosterRows.flatMap(row => {
+        const entries = row.roster || row.players || row.athletes || [];
+        const team = row.team?.displayName || row.team?.shortDisplayName || row.team?.name || "";
+        return (Array.isArray(entries) ? entries : Object.values(entries || {})).map(item => {
+          const athlete = item.athlete || item.player || item;
+          const label = athlete.displayName || athlete.fullName || athlete.shortName || athlete.name;
+          return label ? { key: "player:" + String(label).toLowerCase().replace(/[^a-z0-9]/g, ""), label, team } : null;
+        });
+      }).filter(Boolean);
       if (lineups.length) this.room.lineups = lineups;
       const now = Date.now();
       const coreItems = core.status === "fulfilled" ? (core.value.items || []) : [];
