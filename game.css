@@ -226,3 +226,5 @@ h1,h2,.card h2,.match-header h1,.call-modal h2,.leaderboard-modal h2{font-family
 .calls-modal .call-result-label.correct{display:inline-flex;align-items:center;gap:7px}
 .calls-modal .call-correct-logo{display:block;width:52px;height:auto;max-height:18px;object-fit:contain}
 .calls-modal .call-result-label.correct b{font:700 11px monospace;white-space:nowrap}
+
+.share-svg{display:block;width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
