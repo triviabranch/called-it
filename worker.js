@@ -416,8 +416,11 @@ export class FixtureIndex {
         const broadcastRules = { ...DEFAULT_BROADCAST_RULES, ...(saved.broadcastRules || await this.state.storage.get("broadcastRules") || {}) };
         const enabledCompetitions = normaliseEnabledCompetitions(saved.enabledCompetitions);
         const data = await pullFixtures(broadcastRules, enabledCompetitions, region);
-        const completedFixtures = (await this.state.storage.get("completedFixtures") || [])
+        const archivedFixtures = (await this.state.storage.get("completedFixtures") || [])
           .filter(item => dateKey(item.date) === dateKey(Date.now()));
+        const completedFixtures = [...new Map([...archivedFixtures, ...(data.completedFixtures || [])]
+          .filter(item => item?.id && dateKey(item.date) === dateKey(Date.now()))
+          .map(item => [String(item.id), item])).values()];
         data.completedFixtures = completedFixtures;
         await this.state.storage.put("completedFixtures", completedFixtures);
         await this.state.storage.put(`index:${region}`, data);
