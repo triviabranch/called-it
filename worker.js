@@ -41,6 +41,11 @@ const BROADCAST_REGIONS = [
 ];
 const REGION_BY_CODE = Object.fromEntries(BROADCAST_REGIONS.map(item => [item.code, item]));
 const COUNTRY_TO_REGION = { GB: "gb", UK: "gb", AU: "au", US: "us", CA: "ca", NZ: "nz", IE: "ie" };
+const REGION_BROADCAST_FALLBACKS = {
+  gb: {
+    "eng.league_cup": [{ name: "Sky Sports+", market: "uk" }]
+  }
+};
 function normaliseRegion(value) {
   const key = String(value || "").trim().toLowerCase();
   return REGION_BY_CODE[key] ? key : "gb";
@@ -51,6 +56,10 @@ function regionForRequest(request) {
 function regionInfo(value) {
   const code = normaliseRegion(value);
   return REGION_BY_CODE[code];
+}
+function broadcastsForFixture(fixture, config, region) {
+  if (fixture.broadcasts?.length) return fixture.broadcasts;
+  return REGION_BROADCAST_FALLBACKS[region]?.[config.league] || [];
 }
 const LIVE_CALL_INTERVAL_MS = 7.5 * 60 * 1000;
 const LIVE_PROVIDER_POLL_MS = 15 * 1000;
@@ -257,7 +266,9 @@ async function pullFixtures(broadcastRules = DEFAULT_BROADCAST_RULES, enabledCom
   const fixtures = programmes.flatMap(result => result.status === "fulfilled"
     ? result.value.events.map(item => {
         const config = competitionConfig(result.value.sport, result.value.league);
-        return { ...fixture(item), sport: config.sport, league: config.league, competition: config.name };
+        const parsed = fixture(item);
+        const broadcasts = broadcastsForFixture(parsed, config, selectedRegion);
+        return { ...parsed, televised: broadcasts.length > 0, broadcasts, sport: config.sport, league: config.league, competition: config.name };
       })
     : []).filter(f => {
       const kickoff = new Date(f.date || 0).getTime();
