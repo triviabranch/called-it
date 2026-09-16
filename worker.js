@@ -198,10 +198,10 @@ function inUkSaturdayClosedPeriod(value) {
 
 async function scoreboardEvents(sport, league, start, end) {
   try {
-    return (await readJson(`${siteBase(sport)}/${leaguePath(league)}/scoreboard?dates=${start}-${end}`)).events || [];
+    return (await readJson(`${siteBase(sport)}/${leaguePath(league)}/scoreboard?dates=${start}-${end}&region=uk&lang=en`)).events || [];
   } catch {
     const dates = [...new Set([start, end, new Date().toISOString().slice(0, 10).replaceAll("-", "")])];
-    const results = await Promise.all(dates.map(date => readJson(`${siteBase(sport)}/${leaguePath(league)}/scoreboard?dates=${date}`)));
+    const results = await Promise.all(dates.map(date => readJson(`${siteBase(sport)}/${leaguePath(league)}/scoreboard?dates=${date}&region=uk&lang=en`)));
     return results.flatMap(result => result.events || []);
   }
 }
