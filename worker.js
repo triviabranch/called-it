@@ -313,7 +313,7 @@ async function pullFixtures(broadcastRules = DEFAULT_BROADCAST_RULES, enabledCom
   });
   const completedFixtures = published.filter(f => f.state === "post" && dateKey(f.date) === dateKey(now))
     .sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime());
-  return { provider: "ESPN", fixtureIndexVersion: 4, fetchedAt: now, region: selectedRegion, regionLabel: regionInfo(selectedRegion).label, fixtures, leagueCoverage: coverage, broadcastRules, enabledCompetitions: [...enabled], windowMinutes: 120, catalogueWindowMinutes: 2880 };
+  return { provider: "ESPN", fixtureIndexVersion: 5, fetchedAt: now, region: selectedRegion, regionLabel: regionInfo(selectedRegion).label, fixtures, completedFixtures, leagueCoverage: coverage, broadcastRules, enabledCompetitions: [...enabled], windowMinutes: 120, catalogueWindowMinutes: 2880 };
 }
 async function refreshFixtureIndex(env, region = "gb") {
   const id = env.FIXTURE_INDEX.idFromName("supported-fixtures");
