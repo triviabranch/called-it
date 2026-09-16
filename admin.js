@@ -33,7 +33,7 @@ saveConfig.onclick = async () => {
     const response = await fetch("/api/admin/fixture-config", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ broadcastRules: { ukPremierLeagueSaturdayBlackout: blackoutRule.checked }, enabledCompetitions: [...competitionList.querySelectorAll("input:checked")].map(input => input.value) }) });
     const data = await response.json();
     if (!response.ok) throw Error(data.error || "Could not save rules");
-    configStatus.textContent = "Saved. Run fixture refresh to apply this rule.";
+    configStatus.textContent = "Saved and fixture list refreshed.";
   } catch (error) { configStatus.textContent = error.message || "Could not save rules."; }
   finally { saveConfig.disabled = false; }
 };
