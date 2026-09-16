@@ -185,3 +185,9 @@ h1,h2,.card h2,.match-header h1,.call-modal h2,.leaderboard-modal h2{font-family
 
 .feed-match-clock{color:var(--yellow);font:700 12px monospace;letter-spacing:.06em}
 .feed-match-clock b{font:inherit}
+
+/* Compact scoreboard-to-stats spacing */
+.match-header{padding-bottom:10px;margin-bottom:8px}
+.scoreboard-goal-list{margin-top:3px}
+.player-score-stats{margin-top:0;margin-bottom:12px}
+@media(max-width:500px){.match-header{padding-bottom:8px;margin-bottom:6px}.scoreboard-goal-list{margin-top:2px}.player-score-stats{margin-bottom:9px}}
