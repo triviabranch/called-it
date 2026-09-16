@@ -102,3 +102,12 @@ h1,h2,.card h2,.match-header h1,.call-modal h2,.leaderboard-modal h2{font-family
   .call-answer{text-align:left}
   .call-status-icon.correct{width:68px;flex-basis:68px;height:20px}
 }
+
+/* Primary call line: question left, decision right */
+.call-main{grid-template-columns:minmax(0,1fr) minmax(0,auto);align-items:baseline}
+.call-main .call-answer{display:block;text-align:right;margin:0;padding:0}
+.call-meta{justify-content:flex-end}
+@media(max-width:500px){
+  .call-main{grid-template-columns:minmax(0,1fr) minmax(0,auto)}
+  .call-main .call-answer{text-align:right}
+}
