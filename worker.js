@@ -305,6 +305,15 @@ async function refreshFixtureIndex(env, region = "gb") {
   const id = env.FIXTURE_INDEX.idFromName("supported-fixtures");
   return env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/refresh", { method: "POST", body: JSON.stringify({ region: normaliseRegion(region) }), headers: { "content-type": "application/json" } });
 }
+async function archiveCompletedFixture(env, fixture, leaderboard) {
+  if (!env?.FIXTURE_INDEX || !fixture?.id) return;
+  const id = env.FIXTURE_INDEX.idFromName("supported-fixtures");
+  await env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/complete-fixture", {
+    method: "POST",
+    body: JSON.stringify({ fixture, leaderboard }),
+    headers: { "content-type": "application/json" }
+  });
+}
 async function removeFixtureFromIndex(env, eventId) {
   if (!env?.FIXTURE_INDEX || !eventId) return;
   const id = env.FIXTURE_INDEX.idFromName("supported-fixtures");
@@ -393,6 +402,10 @@ export class FixtureIndex {
         const broadcastRules = { ...DEFAULT_BROADCAST_RULES, ...(saved.broadcastRules || await this.state.storage.get("broadcastRules") || {}) };
         const enabledCompetitions = normaliseEnabledCompetitions(saved.enabledCompetitions);
         const data = await pullFixtures(broadcastRules, enabledCompetitions, region);
+        const completedFixtures = (await this.state.storage.get("completedFixtures") || [])
+          .filter(item => Date.now() - Number(item.completedAt || 0) < 24 * 60 * 60 * 1000);
+        data.completedFixtures = completedFixtures;
+        await this.state.storage.put("completedFixtures", completedFixtures);
         await this.state.storage.put(`index:${region}`, data);
         return json({ ...data, refreshed: true });
       } catch (error) { return json({ error: error.message || "Could not refresh fixture index" }, 502); }
@@ -439,6 +452,25 @@ export class FixtureIndex {
         await this.state.storage.put("liveRooms", rooms);
         return json({ saved: true });
       } catch (error) { return json({ error: error.message || "Could not register live room" }, 400); }
+    }
+    if (request.method === "POST" && new URL(request.url).pathname === "/complete-fixture") {
+      try {
+        const input = await request.json();
+        if (!input.fixture?.id) return json({ error: "fixture.id is required" }, 400);
+        const completedFixtures = await this.state.storage.get("completedFixtures") || [];
+        const completed = {
+          ...input.fixture,
+          state: "post",
+          status: "Full Time",
+          completed: true,
+          completedAt: Date.now(),
+          leaderboard: Array.isArray(input.leaderboard) ? input.leaderboard : []
+        };
+        const next = [completed, ...completedFixtures.filter(item => String(item.id) !== String(completed.id))]
+          .filter(item => Date.now() - Number(item.completedAt || 0) < 24 * 60 * 60 * 1000);
+        await this.state.storage.put("completedFixtures", next);
+        return json({ saved: true, fixture: completed });
+      } catch (error) { return json({ error: error.message || "Could not archive completed fixture" }, 400); }
     }
     if (request.method === "POST" && new URL(request.url).pathname === "/remove-room") {
       try {
@@ -504,6 +536,9 @@ export class MatchRoom {
     const rounds = [...(this.room.session?.rounds || []), this.room.session?.round].filter(Boolean).map(round => ({ id: round.id, type: round.targetType, question: round.question, status: round.status, result: round.result || null, openedAt: round.openedAt || null, presentedMatchTime: round.presentedMatchTime || null, voteEndsAt: round.voteEndsAt || null }));
     const summary = { roomId: this.state.id.toString(), updatedAt: this.adminSyncAt, fixture: this.room.fixture, session: { status: this.room.session?.status, clock: this.room.session?.clock || 0, clockDisplay: this.room.session?.clockDisplay || null, nextQuestionAt: this.room.session?.nextQuestionAt || null }, playerCount: this.room.players?.length || 0, players: (this.room.players || []).map(player => ({ name: player.name, points: player.points || 0, calls: player.calls || player.rounds || 0, correct: player.correct || 0 })), calls: rounds, provider: { lastLivePollAt: this.room.lastLivePollAt || 0, error: this.room.provider?.error || null } };
     try { const id = this.env.FIXTURE_INDEX.idFromName("supported-fixtures"); await this.env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/register-room", { method: "POST", body: JSON.stringify(summary), headers: { "content-type": "application/json" } }); } catch {}
+  }
+  async archiveCompletedFixture() {
+    await archiveCompletedFixture(this.env, this.room.fixture, this.room.leaderboard || []);
   }
   async removeAdminRoom() { if (!this.env?.FIXTURE_INDEX) return; try { const id = this.env.FIXTURE_INDEX.idFromName("supported-fixtures"); await this.env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/remove-room", { method: "POST", body: JSON.stringify({ roomId: this.state.id.toString() }), headers: { "content-type": "application/json" } }); } catch {} }
   public() {
@@ -740,10 +775,10 @@ export class MatchRoom {
     // Commit and broadcast the authoritative full-time state first. The fixture
     // remains joinable until that final state has been sent to subscribers.
     await this.save();
+    await this.archiveCompletedFixture();
     await this.removeAdminRoom();
-    await this.state.storage.deleteAlarm();
     this.broadcast();
-    await removeFixtureFromIndex(this.env, this.room.fixture?.id);
+    this.schedule(30000);
   }
   async advance() {
     const s = this.room.session, r = s.round;
@@ -808,5 +843,24 @@ export class MatchRoom {
   async closeRoom(ws) { this.sockets = new Set(this.state.getWebSockets ? this.state.getWebSockets() : this.sockets); this.sockets.delete(ws); if (this.sockets.size === 0) { if (this.room) await this.state.storage.put("room", this.room); this.schedule(30000); } }
   async webSocketClose(ws) { await this.closeRoom(ws); }
   async webSocketError(ws) { await this.closeRoom(ws); }
-  async alarm() { this.sockets = new Set(this.state.getWebSockets ? this.state.getWebSockets() : this.sockets); if (this.sockets.size === 0) { if (this.room) await this.removeAdminRoom(); if (this.room) { await this.state.storage.delete("room"); this.room = null; } await this.state.storage.deleteAlarm(); } else { await this.load(); await this.advance(); } }
+  async alarm() {
+    this.sockets = new Set(this.state.getWebSockets ? this.state.getWebSockets() : this.sockets);
+    if (this.room?.session?.status === "complete") {
+      for (const socket of this.sockets) { try { socket.close(1000, "Room expired"); } catch {} }
+      this.sockets.clear();
+      await this.removeAdminRoom();
+      await this.state.storage.delete("room");
+      this.room = null;
+      await this.state.storage.deleteAlarm();
+      return;
+    }
+    if (this.sockets.size === 0) {
+      if (this.room) await this.removeAdminRoom();
+      if (this.room) { await this.state.storage.delete("room"); this.room = null; }
+      await this.state.storage.deleteAlarm();
+    } else {
+      await this.load();
+      await this.advance();
+    }
+  }
 }
