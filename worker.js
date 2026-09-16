@@ -3,14 +3,16 @@ const ESPN_CORE_ROOT = "https://sports.core.api.espn.com/v2/sports";
 const SUPPORTED_COMPETITIONS = [
   { sport: "soccer", league: "eng.1", name: "Premier League", order: 0 },
   { sport: "soccer", league: "eng.2", name: "Championship", order: 1 },
-  { sport: "soccer", league: "sco.1", name: "Scottish Premiership", order: 2 },
-  { sport: "soccer", league: "esp.1", name: "LaLiga", order: 3 },
-  { sport: "soccer", league: "ger.1", name: "Bundesliga", order: 4 },
-  { sport: "soccer", league: "ita.1", name: "Serie A", order: 5 },
-  { sport: "soccer", league: "fra.1", name: "Ligue 1", order: 6 },
-  { sport: "soccer", league: "usa.1", name: "MLS", order: 7 },
-  { sport: "soccer", league: "aus.1", name: "A-League Men", order: 8 },
-  { sport: "rugby-league", league: "3", name: "NRL", order: 9 }
+  { sport: "soccer", league: "eng.league_cup", name: "Carabao Cup", order: 2 },
+  { sport: "soccer", league: "eng.fa", name: "FA Cup", order: 3 },
+  { sport: "soccer", league: "sco.1", name: "Scottish Premiership", order: 4 },
+  { sport: "soccer", league: "esp.1", name: "LaLiga", order: 5 },
+  { sport: "soccer", league: "ger.1", name: "Bundesliga", order: 6 },
+  { sport: "soccer", league: "ita.1", name: "Serie A", order: 7 },
+  { sport: "soccer", league: "fra.1", name: "Ligue 1", order: 8 },
+  { sport: "soccer", league: "usa.1", name: "MLS", order: 9 },
+  { sport: "soccer", league: "aus.1", name: "A-League Men", order: 10 },
+  { sport: "rugby-league", league: "3", name: "NRL", order: 11 }
 ];
 const SUPPORTED_LEAGUES = SUPPORTED_COMPETITIONS.map(item => item.league);
 const LEAGUE_HIERARCHY = Object.fromEntries(SUPPORTED_COMPETITIONS.map(item => [item.league, item.order]));
