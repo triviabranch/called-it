@@ -520,7 +520,7 @@ export class MatchRoom {
       };
       for (const question of [...(this.room.preMatch || []), ...(this.room.playerPreMatch?.[player.id] || [])]) {
         const answer = predictions.pre?.[question.id];
-        addCall(question.id, question, answer, "Committed", "BEFORE KICK-OFF");
+        addCall(question.id, question, answer, "Committed", question.type?.startsWith("next-") ? "IN PLAY" : "BEFORE KICK-OFF");
       }
       for (const round of rounds) {
         const answer = predictions[round.id];
