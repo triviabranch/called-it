@@ -75,3 +75,5 @@ h1,h2,.card h2,.match-header h1,.call-modal h2,.leaderboard-modal h2{font-family
 
 .scoreboard-teams{display:grid;gap:0;text-align:right}.scoreboard-teams span{display:flex;justify-content:flex-end;align-items:baseline;gap:.45em;min-width:0}.scoreboard-teams b{font:inherit;min-width:0;overflow-wrap:anywhere}.scoreboard-teams strong{font:inherit;flex:0 0 1.2ch;text-align:right;color:var(--paper)}
 @media(max-width:500px){.scoreboard-teams{font-size:clamp(30px,8vw,48px)}.scoreboard-teams span{gap:.35em}}
+
+.join-modal{position:relative}.join-modal .join-modal-close{position:absolute;top:10px;right:10px;width:30px;height:30px;margin:0;padding:0;background:transparent;color:var(--ink);border:0;font:24px/1 Arial;font-weight:400}.join-modal .join-modal-close:hover,.join-modal .join-modal-close:focus-visible{background:var(--red);color:var(--paper)}
