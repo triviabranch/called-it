@@ -743,7 +743,7 @@ export class MatchRoom {
     this.room.session.lastQuestionType = type; this.room.session.round = round; this.room.session.nextRoundIndex = (this.room.session.nextRoundIndex || 0) + 1; this.room.session.nextQuestionAt = scheduledCallAt + LIVE_CALL_INTERVAL_MS;
     this.room.events.unshift({ label: "Vote now", detail: round.question }); await this.save(); this.broadcast(); this.schedule(Math.min(LIVE_PROVIDER_POLL_MS, Math.max(250, (this.room.session.nextQuestionAt || Date.now() + LIVE_PROVIDER_POLL_MS) - Date.now())));
   }
-  targetForQuestion(q) { return this.room.timeline.find(e => (((q.type === "first-goal-team" || q.type === "next-goal-team") && e.type === "goal") || ((q.type === "first-goal-kick-time" || q.type === "next-goal-kick-time") && e.type === "goal-kick") || ((q.type === "first-foul-team" || q.type === "next-foul-team") && e.type === "foul")) && !(q.baselineEventIds || []).includes(String(e.id)) && (q.afterOffset == null || e.offset > q.afterOffset)); }
+  targetForQuestion(q) { return this.room.timeline.find(e => (((q.type === "first-goal-team" || q.type === "next-goal-team" || q.type === "first-goalscorer") && e.type === "goal") || ((q.type === "first-goal-kick-time" || q.type === "next-goal-kick-time") && e.type === "goal-kick") || ((q.type === "first-foul-team" || q.type === "next-foul-team") && e.type === "foul")) && !(q.baselineEventIds || []).includes(String(e.id)) && (q.afterOffset == null || e.offset > q.afterOffset)); }
   keyForQuestion(q, target) {
     if (!target) return null;
     if (q.type === "first-goalscorer" || q.type === "first-goalscorer-" + String(q.id).split("-").pop()) {
