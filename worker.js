@@ -163,7 +163,11 @@ function eventType(item) {
 }
 function normaliseEvent(item, index, source) {
   const offset = eventClock(item);
-  return { id: String(item?.id || `${source}-${index}`), source, type: eventType(item), offset, minute: offset == null ? null : Math.floor(offset / 60), period: item?.period?.number || item?.period?.displayValue || null, text: item?.text || item?.shortText || item?.description || item?.detail || item?.type?.text || "Match update", athletes: (item?.participants || item?.athletes || []).map(p => p?.athlete?.displayName || p?.displayName).filter(Boolean), team: item?.team?.displayName || item?.team?.shortDisplayName || null, raw: item };
+  const text = item?.text || item?.shortText || item?.description || item?.detail || item?.type?.text || "Match update";
+  const providerClock = String(item?.clock?.displayValue || item?.displayValue || item?.time?.displayValue || "").match(/^(\d{1,3})\s*['’]/);
+  const textClock = String(text).match(/\bat\s+(\d{1,3})['’]/i);
+  const minute = providerClock ? Number(providerClock[1]) : textClock ? Number(textClock[1]) : (offset == null ? null : Math.floor(offset / 60));
+  return { id: String(item?.id || (source + "-" + index)), source, type: eventType(item), offset, minute, period: item?.period?.number || item?.period?.displayValue || null, text, athletes: (item?.participants || item?.athletes || []).map(p => p?.athlete?.displayName || p?.displayName).filter(Boolean), team: item?.team?.displayName || item?.team?.shortDisplayName || null, raw: item };
 }
 function normaliseCorePlay(item, index) { return normaliseEvent({ ...item, text: item.text || item.shortText || item.alternativeText || item.type?.text }, index, "core-play"); }
 function normaliseCommentary(item, index) { const play = item?.play || item; return normaliseEvent({ ...play, clock: play.clock || item.time, text: item.text || play.text || play.shortText }, index, "commentary"); }
@@ -610,13 +614,13 @@ export class MatchRoom {
     const detail = String(status.shortDetail || status.detail || "").trim();
     const rawClock = String(providerStatus.displayClock ?? providerStatus.clockDisplay ?? status.displayClock ?? "").trim();
     const numericClock = Number(providerStatus.clock);
-    if (Number.isFinite(numericClock) && numericClock > 0) {
-      return { seconds: numericClock, display: null };
-    }
     const stoppage = rawClock.match(/^(\d{1,3})\s*(?:\+|['’])\s*(\d{1,2})$/) || detail.match(/(?:^|\s)(\d{1,3})\s*(?:\+|['’])\s*(\d{1,2})(?:\s|$)/);
     if (stoppage) {
       const minutes = Number(stoppage[1]), extra = Number(stoppage[2]);
-      return { seconds: (minutes + extra) * 60, display: minutes + "+" + extra };
+      return { seconds: Number.isFinite(numericClock) && numericClock > 0 ? numericClock : (minutes + extra) * 60, display: minutes + "+" + extra };
+    }
+    if (Number.isFinite(numericClock) && numericClock > 0) {
+      return { seconds: numericClock, display: null };
     }
     const normalClock = rawClock.match(/^(\d{1,3})\s*:\s*(\d{1,2})$/) || detail.match(/(?:^|\s)(\d{1,3})\s*:\s*(\d{1,2})(?:\s|$)/);
     if (normalClock) {
