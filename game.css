@@ -157,3 +157,11 @@ h1,h2,.card h2,.match-header h1,.call-modal h2,.leaderboard-modal h2{font-family
 .scoreboard-goal-list{display:block;margin-top:7px;color:rgba(238,232,220,.74);font:700 clamp(10px,1.8vw,13px) monospace;line-height:1.35;text-align:inherit;white-space:normal}
 .scoreboard-goal-list span{display:block}
 @media(max-width:500px){.scoreboard-goal-list{margin-top:5px;font-size:10px}}
+
+.modal-match-scoreboard{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:4px 0 14px;padding:10px 0;border-top:1px solid #bdb29d;border-bottom:1px solid #bdb29d}
+.modal-match-scoreboard>div{min-width:0}
+.modal-match-scoreboard span{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.modal-match-scoreboard b{font-size:clamp(16px,2.8vw,22px);overflow-wrap:anywhere}
+.modal-match-scoreboard strong{font-size:clamp(20px,3.2vw,28px)}
+.modal-match-scoreboard small{display:block;min-height:1.1em;margin-top:3px;color:var(--muted);font:11px/1.35 monospace;text-align:right;overflow-wrap:anywhere}
+@media(max-width:500px){.modal-match-scoreboard{gap:10px}.modal-match-scoreboard b{font-size:15px}.modal-match-scoreboard strong{font-size:22px}}
