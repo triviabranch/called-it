@@ -601,7 +601,7 @@ export class MatchRoom {
       this.room.provider.pollIntervalSeconds = 15;
       this.room.provider.corePaginationIntervalSeconds = 60;
       if (paginateCore) this.room.lastCorePaginationAt = now;
-      if (this.room.session.status === "running") { const liveClock = this.liveClock(nextFixture, data); this.room.session.clock = liveClock.seconds; this.room.session.clockDisplay = liveClock.display; }
+      if (this.room.session.status === "running" || this.room.fixture?.state === "in") { const liveClock = this.liveClock(nextFixture, data); this.room.session.clock = liveClock.seconds; this.room.session.clockDisplay = liveClock.display; }
     } catch (error) { this.room.provider.error = error.message || "Live feed unavailable"; }
   }
   liveClock(fixtureData, summary) {
@@ -704,7 +704,7 @@ export class MatchRoom {
   }
   rebuildLeaderboard() { this.room.leaderboard = [...this.room.players].sort((a,b) => (b.points||0)-(a.points||0)).map((p,i) => ({ rank:i+1, name:p.name, points:p.points||0, rounds:p.calls ?? p.rounds ?? 0 })); }
   async startSession() {
-    if (this.room.mode === "live") { this.room.session = { status: "running", startedAt: Date.now(), round: null, clock: 0, nextRoundIndex: 0, nextQuestionAt: nextLiveCallAt(this.room.fixture), liveScheduleKickoff: Date.parse(this.room.fixture?.date), mode: "live", speed: 1, lastQuestionType: null }; await this.save(); this.broadcast(); this.schedule(1000); return; }
+    if (this.room.mode === "live") { this.room.session = { status: "running", startedAt: Date.now(), round: null, clock: this.room.session.clock || 0, nextRoundIndex: 0, nextQuestionAt: nextLiveCallAt(this.room.fixture), liveScheduleKickoff: Date.parse(this.room.fixture?.date), mode: "live", speed: 1, lastQuestionType: null }; await this.save(); this.broadcast(); this.schedule(1000); return; }
     const first = this.nextTarget(0);
     if (!first) { this.room.session.status = "complete"; return; }
     this.room.session = { status: "running", startedAt: Date.now(), round: null, clock: 0, clockBase: 0, nextRoundIndex: 0, mode: this.room.mode || "live", speed: this.room.mode === "simulation" ? (this.room.speed || 1) : 1 };
