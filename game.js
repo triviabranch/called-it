@@ -82,7 +82,8 @@ Called-it.triviabranch.com`;
   ctx.fillStyle = "#f4eddf"; ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = "#07182d"; ctx.fillRect(0, 0, canvas.width, 230);
   ctx.fillStyle = "#ed5b4f"; ctx.fillRect(0, 230, canvas.width, 12);
-  ctx.fillStyle = "#f4eddf"; ctx.font = "700 58px Arial"; ctx.fillText("CALLED IT.", 72, 115);
+  const logo = new Image(); logo.src = "assets/called-it-wordmark.png"; await new Promise(resolve => { logo.onload = resolve; logo.onerror = resolve; });
+  if (logo.naturalWidth) ctx.drawImage(logo, 72, 62, 300, 86); else { ctx.fillStyle = "#f4eddf"; ctx.font = "700 58px Arial"; ctx.fillText("CALLED IT.", 72, 115); }
   ctx.font = "700 28px monospace"; ctx.fillStyle = "#edb33f"; ctx.fillText("MY MATCH SCORECARD", 72, 175);
   ctx.fillStyle = "#07182d"; ctx.font = "700 86px Georgia"; ctx.fillText(`${correct}/${total}`, 72, 365);
   ctx.font = "700 28px monospace"; ctx.fillStyle = "#ed5b4f"; ctx.fillText("CORRECT CALLS", 78, 415);
