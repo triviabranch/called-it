@@ -251,7 +251,7 @@ function committedCallsModal() {
         <div class="call-meta"><span class="call-time">${esc(phase)}</span>${statusMark}</div>
       </div>`;
     }).join("");
-    return `<div class="calls-player"><div class="calls-player-head"><b>${esc(player.name)}</b><small>${player.calls?.length || 0} calls</small></div>${calls || "<p class=\"muted\">No calls committed yet.</p>"}</div>`;
+    return `<div class="calls-player">${calls || "<p class=\"muted\">No calls committed yet.</p>"}</div>`;
   }).join("");
   const fixture = state.fixture || {}, home = fixture.home || {}, away = fixture.away || {};
   const compactTeamName = value => String(value || "").replace(/\bUnited\b/g, "Utd");
