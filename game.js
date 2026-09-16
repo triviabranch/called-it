@@ -170,8 +170,8 @@ function committedCallsModal() {
         ? `<span class="call-status call-status-icon ${status}" title="${esc(call.status)}" aria-label="${esc(call.status)}"><img src="${statusImage}" alt="${esc(call.status)}"></span>`
         : `<span class="call-status ${status}">${esc(call.status)}</span>`;
       return `<div class="call-row ${status === "correct" ? "call-correct" : ""}">
-        <div class="call-main"><span class="call-question">${esc(call.question)}</span><span class="call-meta"><span class="call-time">${esc(phase)}</span>${statusMark}</span></div>
-        <span class="call-answer">${esc(call.answer)}</span>
+        <div class="call-main"><span class="call-question">${esc(call.question)}</span><span class="call-answer">${esc(call.answer)}</span></div>
+        <div class="call-meta"><span class="call-time">${esc(phase)}</span>${statusMark}</div>
       </div>`;
     }).join("");
     return `<div class="calls-player"><div class="calls-player-head"><b>${esc(player.name)}</b><small>${player.points || 0} pts · ${player.calls?.length || 0} calls</small></div>${calls || "<p class=\"muted\">No calls committed yet.</p>"}</div>`;
