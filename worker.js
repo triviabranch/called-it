@@ -31,6 +31,7 @@ function coreBase(sport, league) { return `${ESPN_CORE_ROOT}/${encodeURIComponen
 const DEFAULT_BROADCAST_RULES = { ukPremierLeagueSaturdayBlackout: true };
 const LIVE_CALL_INTERVAL_MS = 7.5 * 60 * 1000;
 const LIVE_PROVIDER_POLL_MS = 15 * 1000;
+const FIXTURE_INDEX_REFRESH_MAX_AGE_MS = 5 * 60 * 1000;
 function nextLiveCallAt(fixture, now = Date.now()) {
   const kickoff = Date.parse(fixture?.date);
   if (!Number.isFinite(kickoff)) return now + LIVE_CALL_INTERVAL_MS;
@@ -257,7 +258,8 @@ async function liveFixtures(env) {
   // remove themselves from this index when full time is authoritatively received.
   const missingIndex = response.status === 404;
   const staleSchema = data.fixtureIndexVersion !== 3 || data.windowMinutes !== 120 || data.catalogueWindowMinutes !== 2880 || !Array.isArray(data.enabledCompetitions);
-  if (missingIndex || staleSchema) { await refreshFixtureIndex(env); response = await env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/fixtures"); data = await response.json(); }
+  const staleIndex = !Number.isFinite(Number(data.fetchedAt)) || Date.now() - Number(data.fetchedAt) > FIXTURE_INDEX_REFRESH_MAX_AGE_MS;
+  if (missingIndex || staleSchema || staleIndex) { await refreshFixtureIndex(env); response = await env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/fixtures"); data = await response.json(); }
   const now = Date.now(), horizon = now + 2 * 60 * 60 * 1000, staleCutoff = now - 5 * 3600000;
   data.fixtures = (data.fixtures || []).filter(item => {
     const kickoff = new Date(item.date || 0).getTime();
