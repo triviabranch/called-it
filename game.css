@@ -228,3 +228,8 @@ h1,h2,.card h2,.match-header h1,.call-modal h2,.leaderboard-modal h2{font-family
 .calls-modal .call-result-label.correct b{font:700 11px monospace;white-space:nowrap}
 
 .share-svg{display:block;width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+
+/* Correct-call stamp: never allow the rectangular logo to escape its row */
+.calls-modal .call-result-label.correct img.call-correct-logo{display:block!important;width:52px!important;max-width:52px!important;height:auto!important;max-height:18px!important;flex:0 0 52px!important;object-fit:contain!important}
+@media(max-width:500px){.calls-modal .call-result-label.correct img.call-correct-logo{width:46px!important;max-width:46px!important;max-height:16px!important;flex-basis:46px!important}}
