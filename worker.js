@@ -100,7 +100,14 @@ function fixture(item) {
   const teams = competition.competitors || [];
   const home = teams.find(t => t.homeAway === "home") || teams[0] || {};
   const away = teams.find(t => t.homeAway === "away") || teams[1] || {};
-  const broadcasts = Array.isArray(competition.broadcasts) ? competition.broadcasts.map(item => ({ name: item?.names?.[0] || item?.name || item?.media?.shortName || item?.type?.shortName || "Televised", market: item?.market?.type || item?.market || null })).filter(item => item.name) : [];
+  const broadcastItems = [
+    ...(Array.isArray(item.broadcasts) ? item.broadcasts : []),
+    ...(Array.isArray(competition.broadcasts) ? competition.broadcasts : [])
+  ];
+  const broadcasts = [...new Map(broadcastItems.map(item => {
+    const name = (Array.isArray(item?.names) ? item.names : []).filter(Boolean).join(" / ") || item?.name || item?.media?.shortName || item?.type?.shortName || "Televised";
+    return [name, { name, market: item?.market?.type || item?.market || null }];
+  })).values()];
   return { id: String(item.id), name: item.name || `${home.team?.displayName || "Home"} v ${away.team?.displayName || "Away"}`, date: item.date, status: item.status?.type?.shortDetail || item.status?.type?.detail || item.status?.type?.name || "Scheduled", state: item.status?.type?.state || "pre", televised: broadcasts.length > 0, broadcasts, home: { name: home.team?.displayName || "Home", abbr: home.team?.abbreviation || "", score: home.score ?? null, logo: home.team?.logo || null }, away: { name: away.team?.displayName || "Away", abbr: away.team?.abbreviation || "", score: away.score ?? null, logo: away.team?.logo || null }, venue: competition.venue?.fullName || competition.venue?.address?.city || null };
 }
 function eventClock(item) {
