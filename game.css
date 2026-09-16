@@ -211,3 +211,5 @@ h1,h2,.card h2,.match-header h1,.call-modal h2,.leaderboard-modal h2{font-family
 .modal-match-scorers small{min-height:1.1em;color:var(--muted);font:11px/1.35 monospace;overflow-wrap:anywhere}
 .modal-match-scorers small:last-child{text-align:right}
 @media(max-width:500px){.modal-match-scoreline{gap:6px}.modal-match-scoreline b{font-size:14px}.modal-match-scoreline strong{font-size:21px}.modal-match-scorers{gap:8px}}
+
+.scoreboard-teams span:last-child .scoreboard-goal-list{text-align:right}
