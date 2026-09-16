@@ -165,7 +165,7 @@ function committedCallsModal() {
     const calls = (player.calls || []).map(call => {
       const status = String(call.status || "").toLowerCase();
       const phase = String(call.matchTime || "—").replace("BEFORE KICK-OFF", "PRE-MATCH");
-      const statusImage = status === "correct" ? "assets/called-it-wordmark.png" : "assets/called-it-logo.png";
+      const statusImage = "assets/called-it-logo.png";
       const statusMark = status === "committed" || status === "correct"
         ? `<span class="call-status call-status-icon ${status}" title="${esc(call.status)}" aria-label="${esc(call.status)}"><img src="${statusImage}" alt="${esc(call.status)}"></span>`
         : `<span class="call-status ${status}">${esc(call.status)}</span>`;
@@ -176,7 +176,7 @@ function committedCallsModal() {
     }).join("");
     return `<div class="calls-player"><div class="calls-player-head"><b>${esc(player.name)}</b><small>${player.points || 0} pts · ${player.calls?.length || 0} calls</small></div>${calls || "<p class=\"muted\">No calls committed yet.</p>"}</div>`;
   }).join("");
-  return `<div class="calls-modal-backdrop" data-calls-close><section class="calls-modal" role="dialog" aria-modal="true" aria-label="Committed calls"><a class="modal-brand" href="/" aria-label="Called It home"><img src="assets/called-it-wordmark.png" alt="Called It"></a><div class="section-head"><h2>Committed calls</h2><button class="modal-close" data-calls-close aria-label="Close committed calls">×</button></div><p class="muted">Everyone in this fixture, and the calls already on the board.</p>${playerHtml || "<p class=\"muted\">No players have joined yet.</p>"}</section></div>`;
+  return `<div class="calls-modal-backdrop" data-calls-close><section class="calls-modal" role="dialog" aria-modal="true" aria-label="Committed calls"><div class="section-head"><h2>Committed calls</h2><button class="modal-close" data-calls-close aria-label="Close committed calls">×</button></div><p class="muted">Everyone in this fixture, and the calls already on the board.</p>${playerHtml || "<p class=\"muted\">No players have joined yet.</p>"}</section></div>`;
 }
 
   const callsModal = committedCallsModal();
