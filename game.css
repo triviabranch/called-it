@@ -165,3 +165,6 @@ h1,h2,.card h2,.match-header h1,.call-modal h2,.leaderboard-modal h2{font-family
 .modal-match-scoreboard strong{font-size:clamp(20px,3.2vw,28px)}
 .modal-match-scoreboard small{display:block;min-height:1.1em;margin-top:3px;color:var(--muted);font:11px/1.35 monospace;text-align:right;overflow-wrap:anywhere}
 @media(max-width:500px){.modal-match-scoreboard{gap:10px}.modal-match-scoreboard b{font-size:15px}.modal-match-scoreboard strong{font-size:22px}}
+
+.call-result-label{display:inline-flex;align-items:center;gap:6px;margin-left:auto;color:var(--red);font:700 11px monospace;white-space:nowrap}
+.call-result-label .call-status-icon{margin-left:0}
