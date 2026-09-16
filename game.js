@@ -79,7 +79,19 @@ async function joinFixture(fixture, league, name = "") {
   const button = document.querySelector(`[data-fixture="${CSS.escape(fixture.id)}"] .fixture-open`); if (button) button.disabled = true;
   try { const response = await fetch("/api/room/fixture", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({ fixture, sport: fixture.sport || "soccer", league, mode:"live" }) }); const data = await response.json(); if (!response.ok) throw Error(data.error || "Could not open fixture"); location.href = `/play/${encodeURIComponent(data.roomId)}`; } catch (error) { if (button) button.disabled = false; alert(error.message); }
 }
-function connect() { ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/room/${roomId}`); ws.onmessage = event => { const message = JSON.parse(event.data); if (message.type === "identity") { playerId = message.playerId; localStorage.setItem(`calledItPlayer:${roomId}`, playerId); } if (message.state) { state = message.state; const pendingName = state.fixture?.id ? localStorage.getItem(`calledItPendingName:${state.fixture.id}`)?.trim() : ""; const alreadyJoined = (state.players || []).some(player => String(player.id) === String(playerId)); if (!alreadyJoined && pendingName && !pendingJoinSent) { pendingJoinSent = true; joinModalOpen = false; joinModalDismissed = true; localStorage.removeItem(`calledItPendingName:${state.fixture.id}`); send({ type: "join", name: pendingName, playerId }); } render(); } }; ws.onclose = () => setTimeout(connect, 1500); }
+function attemptPendingJoin() {
+  if (!state?.fixture?.id || !playerId || pendingJoinSent) return;
+  const pendingName = localStorage.getItem(`calledItPendingName:${state.fixture.id}`)?.trim();
+  const alreadyJoined = (state.players || []).some(player => String(player.id) === String(playerId));
+  if (!alreadyJoined && pendingName) {
+    pendingJoinSent = true;
+    joinModalOpen = false;
+    joinModalDismissed = true;
+    localStorage.removeItem(`calledItPendingName:${state.fixture.id}`);
+    send({ type: "join", name: pendingName, playerId });
+  }
+}
+function connect() { ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/room/${roomId}`); ws.onmessage = event => { const message = JSON.parse(event.data); if (message.type === "identity") { playerId = message.playerId; localStorage.setItem(`calledItPlayer:${roomId}`, playerId); attemptPendingJoin(); } if (message.state) { state = message.state; attemptPendingJoin(); render(); } }; ws.onclose = () => setTimeout(connect, 1500); }
 function preMatchCard(me) {
   const questions = state.playerPreMatch?.[playerId] || state.preMatch || [], answered = state.playerStatus?.[playerId] || [], current = questions.find(q => !answered.includes(q.id) && !q.settled);
   if (preMatchDismissed) return "";
