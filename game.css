@@ -127,3 +127,16 @@ h1,h2,.card h2,.match-header h1,.call-modal h2,.leaderboard-modal h2{font-family
 /* Rectangular logo, compactly fitted to the calls header */
 .calls-modal-heading img{width:min(118px,38vw);height:auto;max-height:30px;object-fit:contain;flex:0 1 118px}
 @media(max-width:500px){.calls-modal-heading img{width:min(104px,34vw);max-height:26px;flex-basis:104px}}
+
+
+/* Calls: keep the decision on the primary line and metadata below */
+.calls-modal .call-main{display:flex!important;align-items:baseline;justify-content:space-between;gap:12px}
+.calls-modal .call-main .call-question{flex:1 1 auto;min-width:0}
+.calls-modal .call-main .call-answer{flex:0 1 auto;max-width:48%;min-width:0;text-align:right!important;white-space:normal;overflow-wrap:anywhere}
+.calls-modal .call-meta{display:flex!important;width:100%;justify-content:space-between!important;align-items:center;text-align:left!important}
+.calls-modal .call-meta .call-time{margin-right:auto}
+.calls-modal .call-meta .call-status-icon{margin-left:auto}
+@media(max-width:500px){
+  .calls-modal .call-main{display:flex!important;gap:8px}
+  .calls-modal .call-main .call-answer{max-width:46%;text-align:right!important}
+}
