@@ -86,3 +86,19 @@ h1,h2,.card h2,.match-header h1,.call-modal h2,.leaderboard-modal h2{font-family
 @media(max-width:500px){.call-main{grid-template-columns:1fr;gap:4px}.call-answer{text-align:left}.call-meta{justify-content:space-between}}
 
 .modal-brand{display:flex;justify-content:center;align-items:center;margin:0 auto 16px}.modal-brand img{display:block;width:min(190px,62vw);height:auto;max-height:42px;object-fit:contain}.calls-modal .modal-brand,.leaderboard-modal .modal-brand{margin-bottom:14px}.call-status-icon.correct{width:112px;flex-basis:112px;height:28px;padding:3px;border:2px solid var(--red);transform:rotate(-7deg);box-shadow:2px 2px 0 var(--yellow);background:var(--paper)}.call-status-icon.correct img{object-fit:contain}
+
+/* Compact modal branding and call hierarchy */
+.modal-brand{margin:0 auto 10px}
+.modal-brand img{width:min(118px,38vw);max-height:26px}
+.calls-modal .modal-brand,.leaderboard-modal .modal-brand{margin-bottom:9px}
+.call-main{grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:start}
+.call-main .call-meta{justify-content:flex-end;white-space:nowrap}
+.call-answer{display:block;text-align:left;margin-top:1px;padding-right:4px}
+.call-status-icon.correct{width:78px;flex-basis:78px;height:22px;padding:2px}
+@media(max-width:500px){
+  .modal-brand img{width:min(104px,34vw);max-height:23px}
+  .call-main{grid-template-columns:minmax(0,1fr) auto;gap:7px}
+  .call-main .call-meta{gap:6px}
+  .call-answer{text-align:left}
+  .call-status-icon.correct{width:68px;flex-basis:68px;height:20px}
+}
