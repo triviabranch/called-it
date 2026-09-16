@@ -92,7 +92,7 @@ function attemptPendingJoin() {
     send({ type: "join", name: pendingName, playerId });
   }
 }
-function connect() { ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/room/${roomId}`); ws.onmessage = event => { const message = JSON.parse(event.data); if (message.type === "identity") { playerId = message.playerId; localStorage.setItem(`calledItPlayer:${roomId}`, playerId); attemptPendingJoin(); } if (message.state) { state = message.state; attemptPendingJoin(); render(); } }; ws.onclose = () => setTimeout(connect, 1500); }
+function connect() { ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/room/${roomId}`); ws.onopen = () => { attemptPendingJoin(); setTimeout(attemptPendingJoin, 250); }; ws.onmessage = event => { const message = JSON.parse(event.data); if (message.type === "identity") { playerId = message.playerId; localStorage.setItem(`calledItPlayer:${roomId}`, playerId); attemptPendingJoin(); } if (message.state) { state = message.state; attemptPendingJoin(); render(); setTimeout(attemptPendingJoin, 0); } }; ws.onclose = () => setTimeout(connect, 1500); }
 function preMatchCard(me) {
   const questions = state.playerPreMatch?.[playerId] || state.preMatch || [], answered = state.playerStatus?.[playerId] || [], current = questions.find(q => !answered.includes(q.id) && !q.settled);
   if (preMatchDismissed) return "";
@@ -185,7 +185,7 @@ function committedCallsModal() {
   const newFeed = document.querySelector(".broadcast-feed-list"); if (newFeed) { newFeed.scrollTop = feedWasNearTop ? 0 : feedScrollTop; }
   document.querySelector("[data-player-join-open]")?.addEventListener("click", () => { joinModalOpen = true; joinModalDismissed = false; render(); });
   document.querySelector("[data-player-join-close]")?.addEventListener("click", () => { joinModalOpen = false; joinModalDismissed = true; render(); });
-  document.querySelector("[data-player-join-confirm]")?.addEventListener("click", () => { const input = document.querySelector("[data-player-join-name]"), name = input?.value.trim(); if (!name) { input?.focus(); return; } localStorage.removeItem(`calledItPendingName:${state.fixture?.id}`); send({type:"join", name, playerId}); });
+  document.querySelector("[data-player-join-confirm]")?.addEventListener("click", () => { const input = document.querySelector("[data-player-join-name]"), name = input?.value.trim(); if (!name) { input?.focus(); return; } joinModalOpen = false; joinModalDismissed = true; localStorage.removeItem(`calledItPendingName:${state.fixture?.id}`); send({type:"join", name, playerId}); render(); });
   document.querySelectorAll("[data-pre]").forEach(button => button.onclick = () => { const questions = state.playerPreMatch?.[playerId] || state.preMatch || [], answered = state.playerStatus?.[playerId] || [], q = questions.find(item => item.choices?.some(a => a.key === button.dataset.pre) && !answered.includes(item.id) && !item.settled); if (!q) return; send({type:"prematch", playerId, questionId:q.id, answer:button.dataset.pre}); });
   document.querySelectorAll("[data-pre-submit]").forEach(button => button.onclick = () => { const value = document.querySelector("#preNumber")?.value; if (value === "") return; send({type:"prematch", playerId, questionId:button.dataset.preSubmit, answer:value}); });
   document.querySelectorAll("[data-pre-close]").forEach(button => button.onclick = () => { preMatchDismissed = true; render(); });
