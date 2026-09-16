@@ -582,7 +582,9 @@ export class MatchRoom {
       }
       for (const round of rounds) {
         const answer = predictions[round.id];
-        addCall(round.id, round, answer, "Committed", round.presentedMatchTime || formatMatchTime(round.presentedAtClock, round.presentedAtClockDisplay));
+        const resolvingEvent = round.result?.eventId ? this.room.timeline.find(event => String(event.id) === String(round.result.eventId)) : null;
+        const resolvedAt = round.status === "settled" && resolvingEvent?.minute != null ? `${resolvingEvent.minute}'` : null;
+        addCall(round.id, round, answer, "Committed", resolvedAt || round.presentedMatchTime || formatMatchTime(round.presentedAtClock, round.presentedAtClockDisplay));
       }
       for (const [id, answer] of Object.entries(predictions.pre || {})) addCall(id, { question: "Pre-match call" }, answer, "Committed", "BEFORE KICK-OFF");
       for (const [id, answer] of Object.entries(predictions)) if (id !== "pre") addCall(id, { question: "Match call" }, answer, "Committed", "IN PLAY");
