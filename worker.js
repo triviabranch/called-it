@@ -73,6 +73,9 @@ function nextLiveCallAt(fixture, now = Date.now()) {
   if (now <= firstCall) return firstCall;
   return firstCall + Math.ceil((now - firstCall) / LIVE_CALL_INTERVAL_MS) * LIVE_CALL_INTERVAL_MS;
 }
+function dateKey(value) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(new Date(value));
+}
 function formatMatchTime(seconds, display) {
   const raw = String(display || "").trim();
   const stoppage = raw.match(/^(\d{1,3})\s*(?:\+|['’])\s*(\d{1,2})$/);
@@ -310,7 +313,7 @@ async function archiveCompletedFixture(env, fixture, leaderboard) {
   const id = env.FIXTURE_INDEX.idFromName("supported-fixtures");
   await env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/complete-fixture", {
     method: "POST",
-    body: JSON.stringify({ fixture, leaderboard }),
+    body: JSON.stringify({ fixture, leaderboard, roomId: this.state.id.toString() }),
     headers: { "content-type": "application/json" }
   });
 }
@@ -403,7 +406,7 @@ export class FixtureIndex {
         const enabledCompetitions = normaliseEnabledCompetitions(saved.enabledCompetitions);
         const data = await pullFixtures(broadcastRules, enabledCompetitions, region);
         const completedFixtures = (await this.state.storage.get("completedFixtures") || [])
-          .filter(item => Date.now() - Number(item.completedAt || 0) < 24 * 60 * 60 * 1000);
+          .filter(item => dateKey(item.date) === dateKey(Date.now()));
         data.completedFixtures = completedFixtures;
         await this.state.storage.put("completedFixtures", completedFixtures);
         await this.state.storage.put(`index:${region}`, data);
@@ -464,10 +467,12 @@ export class FixtureIndex {
           status: "Full Time",
           completed: true,
           completedAt: Date.now(),
+          archiveVersion: 1,
+          roomId: input.roomId || null,
           leaderboard: Array.isArray(input.leaderboard) ? input.leaderboard : []
         };
         const next = [completed, ...completedFixtures.filter(item => String(item.id) !== String(completed.id))]
-          .filter(item => Date.now() - Number(item.completedAt || 0) < 24 * 60 * 60 * 1000);
+          .filter(item => dateKey(item.date) === dateKey(Date.now()));
         await this.state.storage.put("completedFixtures", next);
         for (const region of BROADCAST_REGIONS.map(item => item.code)) {
           const index = await this.state.storage.get(`index:${region}`);
