@@ -31,6 +31,27 @@ function normaliseEnabledCompetitions(values) {
 function siteBase(sport) { return `${ESPN_SITE_ROOT}/${encodeURIComponent(sport)}`; }
 function coreBase(sport, league) { return `${ESPN_CORE_ROOT}/${encodeURIComponent(sport)}/leagues/${leaguePath(league)}`; }
 const DEFAULT_BROADCAST_RULES = { ukPremierLeagueSaturdayBlackout: true };
+const BROADCAST_REGIONS = [
+  { code: "gb", espn: "uk", label: "United Kingdom" },
+  { code: "au", espn: "au", label: "Australia" },
+  { code: "us", espn: "us", label: "United States" },
+  { code: "ca", espn: "ca", label: "Canada" },
+  { code: "nz", espn: "nz", label: "New Zealand" },
+  { code: "ie", espn: "ie", label: "Ireland" }
+];
+const REGION_BY_CODE = Object.fromEntries(BROADCAST_REGIONS.map(item => [item.code, item]));
+const COUNTRY_TO_REGION = { GB: "gb", UK: "gb", AU: "au", US: "us", CA: "ca", NZ: "nz", IE: "ie" };
+function normaliseRegion(value) {
+  const key = String(value || "").trim().toLowerCase();
+  return REGION_BY_CODE[key] ? key : "gb";
+}
+function regionForRequest(request) {
+  return normaliseRegion(COUNTRY_TO_REGION[String(request?.cf?.country || "").toUpperCase()] || "gb");
+}
+function regionInfo(value) {
+  const code = normaliseRegion(value);
+  return REGION_BY_CODE[code];
+}
 const LIVE_CALL_INTERVAL_MS = 7.5 * 60 * 1000;
 const LIVE_PROVIDER_POLL_MS = 15 * 1000;
 const FIXTURE_INDEX_REFRESH_MAX_AGE_MS = 5 * 60 * 1000;
@@ -196,24 +217,26 @@ function inUkSaturdayClosedPeriod(value) {
   return parts.weekday === "Sat" && minutes >= 14 * 60 + 45 && minutes < 17 * 60 + 15;
 }
 
-async function scoreboardEvents(sport, league, start, end) {
+async function scoreboardEvents(sport, league, start, end, region = "gb") {
+  const market = regionInfo(region).espn;
   try {
-    return (await readJson(`${siteBase(sport)}/${leaguePath(league)}/scoreboard?dates=${start}-${end}&region=uk&lang=en`)).events || [];
+    return (await readJson(`${siteBase(sport)}/${leaguePath(league)}/scoreboard?dates=${start}-${end}&region=${market}&lang=en`)).events || [];
   } catch {
     const dates = [...new Set([start, end, new Date().toISOString().slice(0, 10).replaceAll("-", "")])];
-    const results = await Promise.all(dates.map(date => readJson(`${siteBase(sport)}/${leaguePath(league)}/scoreboard?dates=${date}&region=uk&lang=en`)));
+    const results = await Promise.all(dates.map(date => readJson(`${siteBase(sport)}/${leaguePath(league)}/scoreboard?dates=${date}&region=${market}&lang=en`)));
     return results.flatMap(result => result.events || []);
   }
 }
-async function pullFixtures(broadcastRules = DEFAULT_BROADCAST_RULES, enabledCompetitions = DEFAULT_ENABLED_COMPETITIONS) {
+async function pullFixtures(broadcastRules = DEFAULT_BROADCAST_RULES, enabledCompetitions = DEFAULT_ENABLED_COMPETITIONS, region = "gb") {
   const now = Date.now();
+  const selectedRegion = normaliseRegion(region);
   const enabled = new Set(normaliseEnabledCompetitions(enabledCompetitions));
   const start = new Date(now - 21 * 86400000).toISOString().slice(0, 10).replaceAll("-", "");
   const end = new Date(now + 7 * 86400000).toISOString().slice(0, 10).replaceAll("-", "");
   const programmes = await Promise.allSettled(SUPPORTED_COMPETITIONS.filter(config => enabled.has(`${config.sport}:${config.league}`)).map(async config => ({
     sport: config.sport,
     league: config.league,
-    events: await scoreboardEvents(config.sport, config.league, start, end)
+    events: await scoreboardEvents(config.sport, config.league, start, end, selectedRegion)
   })));
   const coverageResults = await Promise.all(programmes.map(result => result.status === "fulfilled"
     ? validateLeague(result.value.sport, result.value.league, result.value.events)
@@ -242,26 +265,29 @@ async function pullFixtures(broadcastRules = DEFAULT_BROADCAST_RULES, enabledCom
       const byCompetition = (LEAGUE_HIERARCHY[a.league] ?? 999) - (LEAGUE_HIERARCHY[b.league] ?? 999);
       return byCompetition || a.name.localeCompare(b.name);
     });
-  return { provider: "ESPN", fixtureIndexVersion: 3, fetchedAt: now, fixtures, leagueCoverage: coverage, broadcastRules, enabledCompetitions: [...enabled], windowMinutes: 120, catalogueWindowMinutes: 2880 };
+  return { provider: "ESPN", fixtureIndexVersion: 4, fetchedAt: now, region: selectedRegion, regionLabel: regionInfo(selectedRegion).label, fixtures, leagueCoverage: coverage, broadcastRules, enabledCompetitions: [...enabled], windowMinutes: 120, catalogueWindowMinutes: 2880 };
 }
-async function refreshFixtureIndex(env) {
+async function refreshFixtureIndex(env, region = "gb") {
   const id = env.FIXTURE_INDEX.idFromName("supported-fixtures");
-  return env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/refresh", { method: "POST" });
+  return env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/refresh", { method: "POST", body: JSON.stringify({ region: normaliseRegion(region) }), headers: { "content-type": "application/json" } });
 }
 async function removeFixtureFromIndex(env, eventId) {
   if (!env?.FIXTURE_INDEX || !eventId) return;
   const id = env.FIXTURE_INDEX.idFromName("supported-fixtures");
   await env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/remove", { method: "POST", body: JSON.stringify({ eventId }), headers: { "content-type": "application/json" } });
 }
-async function liveFixtures(env) {
+async function liveFixtures(request, env) {
+  const url = new URL(request.url);
+  const requestedRegion = url.searchParams.get("region");
+  const region = requestedRegion ? normaliseRegion(requestedRegion) : regionForRequest(request);
   const id = env.FIXTURE_INDEX.idFromName("supported-fixtures");
   // The fixture page is the discovery surface. Pull the current programme when
   // it is opened so today's fixtures do not depend on the background cron.
-  let response = await refreshFixtureIndex(env);
+  let response = await refreshFixtureIndex(env, region);
   let data = await response.json();
   // If ESPN is temporarily unavailable, retain the last known catalogue.
   if (!response.ok) {
-    response = await env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/fixtures");
+    response = await env.FIXTURE_INDEX.get(id).fetch(new Request(`https://fixture-index/fixtures?region=${region}`));
     data = await response.json();
   }
   const now = Date.now(), horizon = now + 2 * 60 * 60 * 1000, staleCutoff = now - 5 * 3600000;
@@ -293,7 +319,7 @@ export default {
       } catch (error) { return json({ error: error.message || "Could not kill room" }, 400); }
     }
     if (url.pathname === "/api/admin/fixture-config" && (request.method === "GET" || request.method === "POST")) { const id = env.FIXTURE_INDEX.idFromName("supported-fixtures"); return env.FIXTURE_INDEX.get(id).fetch(new Request(`https://fixture-index/config`, { method: request.method, body: request.method === "POST" ? await request.text() : undefined, headers: request.method === "POST" ? { "content-type": "application/json" } : undefined })); }
-    if (url.pathname === "/api/live-fixtures") return liveFixtures(env);
+    if (url.pathname === "/api/live-fixtures") return liveFixtures(request, env);
     if (url.pathname.startsWith("/api/espn/")) { const response = await espnApi(url); if (response) return response; }
     if (url.pathname === "/api/room/fixture" && request.method === "POST") {
       try {
@@ -320,20 +346,27 @@ export default {
     if (url.pathname === "/test" || url.pathname === "/test/") return env.ASSETS.fetch(new Request(new URL("/test/index.html", request.url), request));
     return env.ASSETS.fetch(request);
   },
-  scheduled(event, env, ctx) { ctx.waitUntil(refreshFixtureIndex(env)); }
+  scheduled(event, env, ctx) { ctx.waitUntil(refreshFixtureIndex(env, "gb")); }
 };
 export class FixtureIndex {
   constructor(state) { this.state = state; }
   async fetch(request) {
     if (request.method === "POST" && new URL(request.url).pathname === "/refresh") {
       try {
+        const input = await request.json().catch(() => ({}));
+        const region = normaliseRegion(input.region);
         const saved = await this.state.storage.get("fixtureConfig") || {};
         const broadcastRules = { ...DEFAULT_BROADCAST_RULES, ...(saved.broadcastRules || await this.state.storage.get("broadcastRules") || {}) };
         const enabledCompetitions = normaliseEnabledCompetitions(saved.enabledCompetitions);
-        const data = await pullFixtures(broadcastRules, enabledCompetitions);
-        await this.state.storage.put("index", data);
+        const data = await pullFixtures(broadcastRules, enabledCompetitions, region);
+        await this.state.storage.put(`index:${region}`, data);
         return json({ ...data, refreshed: true });
       } catch (error) { return json({ error: error.message || "Could not refresh fixture index" }, 502); }
+    }
+    if (request.method === "GET" && new URL(request.url).pathname === "/fixtures") {
+      const region = normaliseRegion(new URL(request.url).searchParams.get("region"));
+      const data = await this.state.storage.get(`index:${region}`);
+      return data ? json(data) : json({ error: "Fixture index has not been refreshed yet", region }, 404);
     }
     if (request.method === "GET" && new URL(request.url).pathname === "/config") {
       const saved = await this.state.storage.get("fixtureConfig") || {};
@@ -384,8 +417,8 @@ export class FixtureIndex {
       const live = Object.values(rooms).filter(room => Number(room.updatedAt || 0) >= cutoff && room.fixture?.state === "in" && room.session?.status !== "complete");
       return json({ rooms: live.sort((a, b) => String(a.fixture?.name || "").localeCompare(String(b.fixture?.name || ""))) });
     }
-    const data = await this.state.storage.get("index");
-    return data ? json(data) : json({ error: "Fixture index has not been refreshed yet" }, 404);
+    const data = await this.state.storage.get("index:gb") || await this.state.storage.get("index");
+    return data ? json(data) : json({ error: "Fixture index has not been refreshed yet", region: "gb" }, 404);
   }
 }
 export class MatchRoom {
