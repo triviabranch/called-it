@@ -527,7 +527,7 @@ export class MatchRoom {
         if (input.fixture) {
           this.room.fixture = input.fixture;
           this.room.provider = { name: "ESPN", sport: input.sport || input.fixture.sport || "soccer", league: input.league || "eng.1", eventId: input.fixture.id, error: null };
-          this.room.timeline = (input.events || []).filter(e => e && e.offset != null).map(e => ({ id: String(e.id), type: e.type, offset: Number(e.offset), minute: e.minute, text: e.text, team: e.team || null })); this.room.mode = input.mode === "simulation" ? "simulation" : "live"; this.room.speed = Math.max(1, Math.min(50, Number(input.speed) || 1)); this.room.session.mode = this.room.mode; this.room.session.speed = this.room.speed; this.room.session.manualPaused = false; this.room.preMatch = this.buildPreMatch();
+          this.room.timeline = (input.events || []).filter(e => e && e.offset != null).map(e => ({ id: String(e.id), type: e.type, offset: Number(e.offset), minute: e.minute, text: e.text, team: e.team || null, athletes: e.athletes || [] })); this.room.mode = input.mode === "simulation" ? "simulation" : "live"; this.room.speed = Math.max(1, Math.min(50, Number(input.speed) || 1)); this.room.session.mode = this.room.mode; this.room.session.speed = this.room.speed; this.room.session.manualPaused = false; this.room.preMatch = this.buildPreMatch();
           this.room.session.status = this.room.fixture.state === "in" ? "lobby" : "lobby";
         }
       } catch {}
@@ -647,7 +647,7 @@ export class MatchRoom {
       const source = coreItems.length ? "core-live" : "summary-live-fallback";
       const incoming = (coreItems.length ? coreItems : (data.plays || [])).map((p, i) => normaliseEvent(p, i, source)).filter(e => e.offset != null && e.type !== "other");
       const known = new Set(this.room.timeline.map(e => e.id));
-      for (const e of incoming) if (!known.has(e.id)) { this.room.timeline.push({ id: e.id, type: e.type, offset: e.offset, minute: e.minute, text: e.text, team: e.team || null }); this.room.events.unshift({ label: e.type === "goal" ? "GOAL" : "Match update", detail: e.text }); }
+      for (const e of incoming) if (!known.has(e.id)) { this.room.timeline.push({ id: e.id, type: e.type, offset: e.offset, minute: e.minute, text: e.text, team: e.team || null, athletes: e.athletes || [] }); this.room.events.unshift({ label: e.type === "goal" ? "GOAL" : "Match update", detail: e.text }); }
       this.room.timeline.sort((a, b) => a.offset - b.offset);
       const homeName = String(this.room.fixture.home?.name || "").toLowerCase();
       const awayName = String(this.room.fixture.away?.name || "").toLowerCase();
