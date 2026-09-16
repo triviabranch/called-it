@@ -592,7 +592,11 @@ export class MatchRoom {
     });
     const settledEventIds = [...(this.room.preMatch || []), ...rounds].map(item => item.result?.eventId).filter(Boolean).map(String);
     const playerPreMatch = Object.fromEntries(Object.entries(this.room.playerPreMatch || {}));
-    return { ...this.room, predictions: undefined, playerStatus: Object.fromEntries(this.room.players.map(p => [p.id, Object.keys(this.room.predictions[p.id]?.pre || {})])), playerPreMatch, committedCalls, settledEventIds };
+    const renderedPlayers = this.room.players.map(player => ({
+      ...player,
+      calls: committedCalls.find(item => String(item.id) === String(player.id))?.calls.length || 0
+    }));
+    return { ...this.room, players: renderedPlayers, predictions: undefined, playerStatus: Object.fromEntries(this.room.players.map(p => [p.id, Object.keys(this.room.predictions[p.id]?.pre || {})])), playerPreMatch, committedCalls, settledEventIds };
   }
   broadcast() { this.sockets = new Set(this.state.getWebSockets ? this.state.getWebSockets() : this.sockets); const m = JSON.stringify({ type: "state", state: this.public() }); for (const ws of this.sockets) { try { ws.send(m); } catch {} } }
   schedule(ms) { this.state.storage.setAlarm(Date.now() + Math.max(250, Math.min(ms, 7200000))); }
