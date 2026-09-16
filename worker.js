@@ -348,11 +348,9 @@ export class FixtureIndex {
         const enabledCompetitions = normaliseEnabledCompetitions(input.enabledCompetitions);
         await this.state.storage.put("fixtureConfig", { broadcastRules, enabledCompetitions });
         await this.state.storage.put("broadcastRules", broadcastRules);
-        // Persist the selection and rebuild the catalogue in the same action,
-        // so the next page load immediately reflects every selected competition.
-        const index = await pullFixtures(broadcastRules, enabledCompetitions);
-        await this.state.storage.put("index", index);
-        return json({ ...index, broadcastRules, enabledCompetitions, saved: true });
+        // Saving configuration is independent of the ESPN pull. The public
+        // fixture page will use this selection on its next load or manual refresh.
+        return json({ broadcastRules, enabledCompetitions, saved: true });
       } catch (error) { return json({ error: error.message || "Could not save fixture configuration" }, 400); }
     }
     if (request.method === "POST" && new URL(request.url).pathname === "/remove") {
