@@ -208,13 +208,14 @@ function committedCallsModal() {
         <div class="call-meta"><span class="call-time">${esc(phase)}</span>${statusMark}</div>
       </div>`;
     }).join("");
-    return `<div class="calls-player"><div class="calls-player-head"><b>${esc(player.name)}</b><small>${player.points || 0} pts · ${player.calls?.length || 0} calls</small></div>${calls || "<p class=\"muted\">No calls committed yet.</p>"}</div>`;
+    return `<div class="calls-player"><div class="calls-player-head"><b>${esc(player.name)}</b><small>${player.calls?.length || 0} calls</small></div>${calls || "<p class=\"muted\">No calls committed yet.</p>"}</div>`;
   }).join("");
   const fixture = state.fixture || {}, home = fixture.home || {}, away = fixture.away || {};
   const compactTeamName = value => String(value || "").replace(/\bUnited\b/g, "Utd");
   const homeGoals = scorecardGoalLines(home.name), awayGoals = scorecardGoalLines(away.name);
+  const scoreHero = `<div class="calls-score-hero"><strong>${esc(players[0]?.points || 0)}</strong><span>POINTS</span></div>`;
   const matchScoreboard = `<div class="modal-match-scoreline" aria-label="Match score"><b>${esc(compactTeamName(home.name || "Home"))}</b><strong>${esc(home.score ?? "—")}–${esc(away.score ?? "—")}</strong><b>${esc(compactTeamName(away.name || "Away"))}</b></div><div class="modal-match-scorers"><small>${homeGoals.map(esc).join("<br>")}</small><small>${awayGoals.map(esc).join("<br>")}</small></div>`;
-  return `<div class="calls-modal-backdrop" data-calls-close><section class="calls-modal" role="dialog" aria-modal="true" aria-label="${esc(callsTitle)}"><div class="section-head"><div class="calls-modal-heading"><img src="assets/called-it-wordmark.png" alt="Called It"><h2>${esc(callsTitle)}</h2></div><button class="modal-close" data-calls-close aria-label="Close calls">×</button></div>${matchScoreboard}${playerHtml || "<p class=\"muted\">No calls committed yet.</p>"}<div class="calls-modal-footer"><button type="button" class="share-result share-icon" data-share-result aria-label="Share calls" title="Share calls"><span aria-hidden="true">↗</span></button></div></section></div>`;
+  return `<div class="calls-modal-backdrop" data-calls-close><section class="calls-modal" role="dialog" aria-modal="true" aria-label="${esc(callsTitle)}"><div class="section-head"><div class="calls-modal-heading"><img src="assets/called-it-wordmark.png" alt="Called It"><h2>${esc(callsTitle)}</h2></div><button class="modal-close" data-calls-close aria-label="Close calls">×</button></div>${scoreHero}${matchScoreboard}${playerHtml || "<p class=\"muted\">No calls committed yet.</p>"}<div class="calls-modal-footer"><button type="button" class="share-result share-icon" data-share-result aria-label="Share calls" title="Share calls"><span aria-hidden="true">↗</span></button></div></section></div>`;
 }
 
   const callsModal = committedCallsModal();
