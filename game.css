@@ -148,3 +148,8 @@ h1,h2,.card h2,.match-header h1,.call-modal h2,.leaderboard-modal h2{font-family
 .share-result{width:auto!important;margin:12px 0 0!important;padding:10px 14px!important;font:11px monospace!important;text-transform:uppercase;letter-spacing:.06em}
 .calls-modal-actions .share-result{margin:0!important;flex:0 0 auto}
 .completed-leaderboard-backdrop .share-result{display:block;margin-left:auto!important}
+
+.lineup-group{border:0;border-top:1px solid rgba(7,24,45,.16);padding:12px 0 0;margin:12px 0 0}
+.lineup-group:first-child{border-top:0;margin-top:0}
+.lineup-group legend{padding:0;color:var(--muted);font:11px monospace;text-transform:uppercase;letter-spacing:.1em}
+.lineup-group .answers{margin-top:8px}
