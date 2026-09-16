@@ -153,3 +153,7 @@ h1,h2,.card h2,.match-header h1,.call-modal h2,.leaderboard-modal h2{font-family
 .lineup-group:first-child{border-top:0;margin-top:0}
 .lineup-group legend{padding:0;color:var(--muted);font:11px monospace;text-transform:uppercase;letter-spacing:.1em}
 .lineup-group .answers{margin-top:8px}
+
+.scoreboard-goal-list{display:block;margin-top:7px;color:rgba(238,232,220,.74);font:700 clamp(10px,1.8vw,13px) monospace;line-height:1.35;text-align:inherit;white-space:normal}
+.scoreboard-goal-list span{display:block}
+@media(max-width:500px){.scoreboard-goal-list{margin-top:5px;font-size:10px}}
