@@ -244,8 +244,12 @@ function inUkSaturdayClosedPeriod(value) {
 async function scoreboardEvents(sport, league, start, end, region = "gb") {
   const market = regionInfo(region).espn;
   try {
-    return (await readJson(`${siteBase(sport)}/${leaguePath(league)}/scoreboard?dates=${start}-${end}&region=${market}&lang=en`)).events || [];
+    const ranged = await readJson(`${siteBase(sport)}/${leaguePath(league)}/scoreboard?dates=${start}-${end}&region=${market}&lang=en`);
+    if (Array.isArray(ranged.events) && ranged.events.length) return ranged.events;
+    throw new Error(ranged.message || "ESPN returned no ranged events");
   } catch {
+    // UEFA scoreboard endpoints reject multi-day ranges even though their
+    // single-day endpoints return the fixtures correctly.
     const dates = [...new Set([start, end, new Date().toISOString().slice(0, 10).replaceAll("-", "")])];
     const results = await Promise.all(dates.map(date => readJson(`${siteBase(sport)}/${leaguePath(league)}/scoreboard?dates=${date}&region=${market}&lang=en`)));
     return results.flatMap(result => result.events || []);
