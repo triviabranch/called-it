@@ -160,8 +160,8 @@ function render() {
   const leaderboard = `<div class="leaderboard-modal-backdrop" data-leaderboard-close><section class="leaderboard-modal" role="dialog" aria-modal="true" aria-label="Match leaderboard"><a class="modal-brand" href="/" aria-label="Called It home"><img src="assets/called-it-wordmark.png" alt="Called It"></a><div class="section-head"><h2>${matchFinished ? "Final results" : "Leaderboard"}</h2><button class="modal-close" data-leaderboard-close aria-label="Close leaderboard">×</button></div><div class="leaderboard-match"><div class="phase">${matchFinished ? "FULL TIME" : "LIVE MATCH"} · ${esc(competitionName(f))}</div><h3 class="scoreboard-teams leaderboard-scoreboard"><span><b>${esc(f.home?.name)}</b><strong>${f.home?.score ?? "–"}</strong></span><span><b>${esc(f.away?.name)}</b><strong>${f.away?.score ?? "–"}</strong></span></h3></div><p class="muted">Room results</p><div class="leaders">${(state.leaderboard || []).map(p => `<div><b>#${p.rank} ${esc(p.name)}</b><span>${p.points} pts · ${p.rounds} calls</span></div>`).join("") || '<p class="muted">No players yet.</p>'}</div></section></div>`;
 function committedCallsModal() {
   if (!callsOpen) return "";
-  const players = state.committedCalls || [];
-  const callsTitle = players.length === 1 ? String(players[0].name || "") + "'s Calls" : "Players' Calls";
+  const players = (state.committedCalls || []).filter(player => String(player.id) === String(playerId));
+  const callsTitle = String(players[0]?.name || "Your") + "'s Calls";
   const playerHtml = players.map(player => {
     const calls = (player.calls || []).map(call => {
       const status = String(call.status || "").toLowerCase();
