@@ -65,6 +65,46 @@ async function shareResult(title, text, url = location.href) {
     alert("Share link copied");
   } catch {}
 }
+async function shareCallsCard() {
+  const me = (state.players || []).find(player => String(player.id) === String(playerId));
+  const fixture = state.fixture || {}, home = fixture.home?.name || "Home", away = fixture.away?.name || "Away";
+  const calls = state.committedCalls?.find(player => String(player.id) === String(playerId))?.calls || [];
+  const correct = me?.correct || calls.filter(call => String(call.status).toLowerCase() === "correct").length;
+  const total = calls.length || me?.calls || 0;
+  const message = `I Called It!
+${correct}/${total} correct whilst watching
+${home} vs ${away}
+
+Play along with live matches at
+Called-it.triviabranch.com`;
+  const canvas = document.createElement("canvas"), ctx = canvas.getContext("2d");
+  canvas.width = 1080; canvas.height = 1350;
+  ctx.fillStyle = "#f4eddf"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "#07182d"; ctx.fillRect(0, 0, canvas.width, 230);
+  ctx.fillStyle = "#ed5b4f"; ctx.fillRect(0, 230, canvas.width, 12);
+  ctx.fillStyle = "#f4eddf"; ctx.font = "700 58px Arial"; ctx.fillText("CALLED IT.", 72, 115);
+  ctx.font = "700 28px monospace"; ctx.fillStyle = "#edb33f"; ctx.fillText("MY MATCH SCORECARD", 72, 175);
+  ctx.fillStyle = "#07182d"; ctx.font = "700 86px Georgia"; ctx.fillText(`${correct}/${total}`, 72, 365);
+  ctx.font = "700 28px monospace"; ctx.fillStyle = "#ed5b4f"; ctx.fillText("CORRECT CALLS", 78, 415);
+  ctx.fillStyle = "#07182d"; ctx.font = "700 42px Arial";
+  const fit = value => String(value).length > 30 ? String(value).slice(0, 28) + "…" : String(value);
+  ctx.fillText(fit(`${home} ${fixture.home?.score ?? "—"}–${fixture.away?.score ?? "—"} ${away}`), 72, 535);
+  ctx.strokeStyle = "#bdb29d"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(72, 590); ctx.lineTo(1008, 590); ctx.stroke();
+  ctx.fillStyle = "#07182d"; ctx.font = "700 30px monospace"; ctx.fillText("I CALLED IT!", 72, 685);
+  ctx.font = "26px Arial"; let y = 745;
+  for (const call of calls.slice(0, 6)) { ctx.fillText(fit(call.question || "Call"), 72, y); ctx.fillStyle = "#ed5b4f"; ctx.textAlign = "right"; ctx.fillText(fit(call.answer || ""), 1008, y); ctx.textAlign = "left"; y += 70; }
+  ctx.fillStyle = "#07182d"; ctx.font = "700 26px monospace"; ctx.fillText("PLAY ALONG WITH LIVE MATCHES AT", 72, 1210);
+  ctx.fillStyle = "#ed5b4f"; ctx.font = "700 30px Arial"; ctx.fillText("Called-it.triviabranch.com", 72, 1265);
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+  if (!blob) throw new Error("Scorecard image unavailable");
+  const file = new File([blob], "called-it-scorecard.png", { type: "image/png" });
+  try {
+    if (navigator.share && navigator.canShare?.({ files: [file] })) { await navigator.share({ title: "Called It scorecard", text: message, files: [file] }); return; }
+    if (navigator.share) { await navigator.share({ title: "Called It scorecard", text: message, url: location.href }); return; }
+    await navigator.clipboard.writeText(message + "\\n" + location.href);
+    alert("Share message copied");
+  } catch {}
+}
 function showCompletedLeaderboard(fixture) {
   const existing = document.querySelector(".completed-leaderboard-backdrop"); if (existing) existing.remove();
   const modal = document.createElement("div"); modal.className = "leaderboard-modal-backdrop completed-leaderboard-backdrop";
@@ -215,7 +255,7 @@ function committedCallsModal() {
   const homeGoals = scorecardGoalLines(home.name), awayGoals = scorecardGoalLines(away.name);
   const scoreHero = `<div class="calls-score-hero"><strong>${esc(players[0]?.points || 0)}</strong><span>POINTS</span></div>`;
   const matchScoreboard = `<div class="modal-match-scoreline" aria-label="Match score"><b>${esc(compactTeamName(home.name || "Home"))}</b><strong>${esc(home.score ?? "—")}–${esc(away.score ?? "—")}</strong><b>${esc(compactTeamName(away.name || "Away"))}</b></div><div class="modal-match-scorers"><small>${homeGoals.map(esc).join("<br>")}</small><small>${awayGoals.map(esc).join("<br>")}</small></div>`;
-  return `<div class="calls-modal-backdrop" data-calls-close><section class="calls-modal" role="dialog" aria-modal="true" aria-label="${esc(callsTitle)}"><div class="section-head"><div class="calls-modal-heading"><img src="assets/called-it-wordmark.png" alt="Called It"><h2>${esc(callsTitle)}</h2></div><button class="modal-close" data-calls-close aria-label="Close calls">×</button></div>${scoreHero}${matchScoreboard}${playerHtml || "<p class=\"muted\">No calls committed yet.</p>"}<div class="calls-modal-footer"><button type="button" class="share-result share-icon" data-share-result aria-label="Share calls" title="Share calls"><span aria-hidden="true">↗</span></button></div></section></div>`;
+  return `<div class="calls-modal-backdrop" data-calls-close><section class="calls-modal" role="dialog" aria-modal="true" aria-label="${esc(callsTitle)}"><div class="section-head"><div class="calls-modal-heading"><img src="assets/called-it-wordmark.png" alt="Called It"><h2>${esc(callsTitle)}</h2></div><button class="modal-close" data-calls-close aria-label="Close calls">×</button></div>${scoreHero}${matchScoreboard}${playerHtml || "<p class=\"muted\">No calls committed yet.</p>"}<div class="calls-modal-footer"><button type="button" class="share-result share-icon" data-share-result data-share-kind="calls" aria-label="Share calls" title="Share calls"><span aria-hidden="true">↗</span></button></div></section></div>`;
 }
 
   const callsModal = committedCallsModal();
@@ -242,9 +282,9 @@ function committedCallsModal() {
     }
   });
   document.querySelectorAll("[data-share-result]").forEach(button => button.onclick = () => {
-    const isCalls = button.textContent.toLowerCase().includes("calls"), meNow = (state.players || []).find(p => p.id === playerId), fNow = state.fixture || {};
+    const isCalls = button.dataset.shareKind === "calls" || button.textContent.toLowerCase().includes("calls"), meNow = (state.players || []).find(p => p.id === playerId), fNow = state.fixture || {};
     const text = isCalls ? (meNow?.name || "A player") + " made " + (meNow?.calls || 0) + " calls on Called It: " + (fNow.home?.name || "Home") + " v " + (fNow.away?.name || "Away") : (fNow.home?.name || "Home") + " " + (fNow.home?.score ?? "–") + " — " + (fNow.away?.score ?? "–") + " " + (fNow.away?.name || "Away") + " · Called It";
-    shareResult(isCalls ? "Called It calls" : "Called It result", text);
+    if (isCalls) shareCallsCard(); else shareResult("Called It result", text);
   });
   document.querySelectorAll("[data-leaderboard-open]").forEach(button => button.onclick = () => { leaderboardOpen = true; render(); });
   document.querySelectorAll("[data-leaderboard-close]").forEach(button => button.onclick = event => { if (event.target === button || button.classList.contains("modal-close")) { leaderboardOpen = false; if (state.session?.status === "complete") finalLeaderboardDismissed = true; render(); } });
