@@ -584,7 +584,7 @@ export class MatchRoom {
   broadcast() { this.sockets = new Set(this.state.getWebSockets ? this.state.getWebSockets() : this.sockets); const m = JSON.stringify({ type: "state", state: this.public() }); for (const ws of this.sockets) { try { ws.send(m); } catch {} } }
   schedule(ms) { this.state.storage.setAlarm(Date.now() + Math.max(250, Math.min(ms, 7200000))); }
   lineupChoices() {
-    return [...new Map((this.room.lineups || []).map(player => [player.key, { key: player.key, label: player.label }])).values()];
+    return [...new Map((this.room.lineups || []).map(player => [player.key, { key: player.key, label: player.label, team: player.team }])).values()];
   }
   buildPreMatch(lateJoin = false, playerId = "") {
     const f = this.room.fixture || {}, home = f.home?.name || "Home", away = f.away?.name || "Away";
@@ -601,7 +601,7 @@ export class MatchRoom {
       : null;
     return [
       { id: (nextGoal ? "next-goal-team" : "first-goal-team") + suffix, type: nextGoal ? "next-goal-team" : "first-goal-team", question: nextGoal ? "Which team scores next?" : "Which team scores first?", choices: [{ key: "home", label: home }, { key: "away", label: away }], settled: false, result: null, afterOffset: after(nextGoal, "goal"), baselineEventIds },
-      { id: "first-goalscorer" + suffix, type: "first-goalscorer", question: "Who scores first?", choices: this.lineupChoices(), settled: false, result: null, afterOffset: after(false, "goal"), baselineEventIds },
+      ...(lateJoin ? [] : [{ id: "first-goalscorer", type: "first-goalscorer", question: "Who scores first?", choices: this.lineupChoices(), settled: false, result: null, afterOffset: null, baselineEventIds }]),
       { id: (nextGoalKick ? "next-goal-kick-time" : "first-goal-kick-time") + suffix, type: nextGoalKick ? "next-goal-kick-time" : "first-goal-kick-time", question: nextGoalKick ? "What’s the time of the next goal kick?" : "What’s the time of the first goal kick?", input: { min: 0, max: 120, step: 1, value: currentMinutes, suffix: "minutes", lateJoin: nextGoalKick }, choices: [], settled: false, result: null, afterOffset: after(nextGoalKick, "goal-kick"), baselineEventIds },
       { id: (nextFoul ? "next-foul-team" : "first-foul-team") + suffix, type: nextFoul ? "next-foul-team" : "first-foul-team", question: nextFoul ? "Which team commits the next foul?" : "Which team commits the first foul?", choices: [{ key: "home", label: home }, { key: "away", label: away }], settled: false, result: null, afterOffset: after(nextFoul, "foul"), baselineEventIds }
     ];
