@@ -211,7 +211,9 @@ function committedCallsModal() {
     return `<div class="calls-player"><div class="calls-player-head"><b>${esc(player.name)}</b><small>${player.points || 0} pts · ${player.calls?.length || 0} calls</small></div>${calls || "<p class=\"muted\">No calls committed yet.</p>"}</div>`;
   }).join("");
   const fixture = state.fixture || {}, home = fixture.home || {}, away = fixture.away || {};
-  const matchScoreboard = `<div class="modal-match-scoreboard" aria-label="Match score"><div><span><b>${esc(home.name || "Home")}</b><strong>${esc(home.score ?? "—")}</strong></span><small>${scorecardGoalLines(home.name).map(esc).join("<br>")}</small></div><div><span><b>${esc(away.name || "Away")}</b><strong>${esc(away.score ?? "—")}</strong></span><small>${scorecardGoalLines(away.name).map(esc).join("<br>")}</small></div></div>`;
+  const compactTeamName = value => String(value || "").replace(/\bUnited\b/g, "Utd");
+  const homeGoals = scorecardGoalLines(home.name), awayGoals = scorecardGoalLines(away.name);
+  const matchScoreboard = `<div class="modal-match-scoreline" aria-label="Match score"><b>${esc(compactTeamName(home.name || "Home"))}</b><strong>${esc(home.score ?? "—")}–${esc(away.score ?? "—")}</strong><b>${esc(compactTeamName(away.name || "Away"))}</b></div><div class="modal-match-scorers"><small>${homeGoals.map(esc).join("<br>")}</small><small>${awayGoals.map(esc).join("<br>")}</small></div>`;
   return `<div class="calls-modal-backdrop" data-calls-close><section class="calls-modal" role="dialog" aria-modal="true" aria-label="${esc(callsTitle)}"><div class="section-head"><div class="calls-modal-heading"><img src="assets/called-it-wordmark.png" alt="Called It"><h2>${esc(callsTitle)}</h2></div><button class="modal-close" data-calls-close aria-label="Close calls">×</button></div>${matchScoreboard}<div class="calls-modal-actions"><p class="muted">Your calls in this fixture.</p><button type="button" class="share-result" data-share-result>Share calls</button></div>${playerHtml || "<p class=\"muted\">No calls committed yet.</p>"}</section></div>`;
 }
 
