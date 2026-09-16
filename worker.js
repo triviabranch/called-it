@@ -501,7 +501,7 @@ export class MatchRoom {
     if (request.headers.get("Upgrade") === "websocket") {
       const pair = new WebSocketPair(); this.state.acceptWebSocket(pair[1]); this.sockets.add(pair[1]);
       if (!this.room) await this.load();
-      if (this.room.fixture?.id && this.room.mode === "live") { await this.refreshLive(); this.anchorLiveSchedule(); this.settlePreMatch(this.room.session.clock || 0); await this.save(); if (this.room.session.status === "running") await this.advance(); }
+      if (this.room.fixture?.id && this.room.mode === "live") { await this.refreshLive(); if (!this.room.players.length && !Object.keys(this.room.predictions || {}).length) this.room.preMatch = this.buildPreMatch(); this.anchorLiveSchedule(); this.settlePreMatch(this.room.session.clock || 0); await this.save(); if (this.room.session.status === "running") await this.advance(); }
       pair[1].send(JSON.stringify({ type: "state", state: this.public() }));
       return new Response(null, { status: 101, webSocket: pair[0] });
     }
@@ -583,6 +583,9 @@ export class MatchRoom {
   }
   broadcast() { this.sockets = new Set(this.state.getWebSockets ? this.state.getWebSockets() : this.sockets); const m = JSON.stringify({ type: "state", state: this.public() }); for (const ws of this.sockets) { try { ws.send(m); } catch {} } }
   schedule(ms) { this.state.storage.setAlarm(Date.now() + Math.max(250, Math.min(ms, 7200000))); }
+  lineupChoices() {
+    return [...new Map((this.room.lineups || []).map(player => [player.key, { key: player.key, label: player.label }])).values()];
+  }
   buildPreMatch(lateJoin = false, playerId = "") {
     const f = this.room.fixture || {}, home = f.home?.name || "Home", away = f.away?.name || "Away";
     const suffix = lateJoin ? "-" + playerId : "";
@@ -598,6 +601,7 @@ export class MatchRoom {
       : null;
     return [
       { id: (nextGoal ? "next-goal-team" : "first-goal-team") + suffix, type: nextGoal ? "next-goal-team" : "first-goal-team", question: nextGoal ? "Which team scores next?" : "Which team scores first?", choices: [{ key: "home", label: home }, { key: "away", label: away }], settled: false, result: null, afterOffset: after(nextGoal, "goal"), baselineEventIds },
+      { id: "first-goalscorer" + suffix, type: "first-goalscorer", question: "Who scores first?", choices: this.lineupChoices(), settled: false, result: null, afterOffset: after(false, "goal"), baselineEventIds },
       { id: (nextGoalKick ? "next-goal-kick-time" : "first-goal-kick-time") + suffix, type: nextGoalKick ? "next-goal-kick-time" : "first-goal-kick-time", question: nextGoalKick ? "What’s the time of the next goal kick?" : "What’s the time of the first goal kick?", input: { min: 0, max: 120, step: 1, value: currentMinutes, suffix: "minutes", lateJoin: nextGoalKick }, choices: [], settled: false, result: null, afterOffset: after(nextGoalKick, "goal-kick"), baselineEventIds },
       { id: (nextFoul ? "next-foul-team" : "first-foul-team") + suffix, type: nextFoul ? "next-foul-team" : "first-foul-team", question: nextFoul ? "Which team commits the next foul?" : "Which team commits the first foul?", choices: [{ key: "home", label: home }, { key: "away", label: away }], settled: false, result: null, afterOffset: after(nextFoul, "foul"), baselineEventIds }
     ];
@@ -625,6 +629,14 @@ export class MatchRoom {
       const competition = data.header?.competitions?.[0] || data.competitions?.[0] || {};
       const nextFixture = fixture({ id, name: competition.shortName || competition.name, date: competition.date || this.room.fixture.date, competitions: [{ ...competition, competitors: competition.competitors || [] }], status: competition.status });
       this.room.fixture = { ...this.room.fixture, ...nextFixture, home: { ...this.room.fixture.home, ...nextFixture.home }, away: { ...this.room.fixture.away, ...nextFixture.away } };
+      const rosterRows = data.rosters || data.lineups || [];
+      const lineups = rosterRows.flatMap(row => (row.roster || row.players || []).map(item => {
+        const athlete = item.athlete || item.player || item;
+        const label = athlete.displayName || athlete.fullName || athlete.shortName;
+        const team = row.team?.displayName || row.team?.shortDisplayName || "";
+        return label ? { key: "player:" + String(label).toLowerCase().replace(/[^a-z0-9]/g, ""), label, team } : null;
+      })).filter(Boolean);
+      if (lineups.length) this.room.lineups = lineups;
       const now = Date.now();
       const coreItems = core.status === "fulfilled" ? (core.value.items || []) : [];
       const source = coreItems.length ? "core-live" : "summary-live-fallback";
@@ -729,6 +741,12 @@ export class MatchRoom {
   targetForQuestion(q) { return this.room.timeline.find(e => (((q.type === "first-goal-team" || q.type === "next-goal-team") && e.type === "goal") || ((q.type === "first-goal-kick-time" || q.type === "next-goal-kick-time") && e.type === "goal-kick") || ((q.type === "first-foul-team" || q.type === "next-foul-team") && e.type === "foul")) && !(q.baselineEventIds || []).includes(String(e.id)) && (q.afterOffset == null || e.offset > q.afterOffset)); }
   keyForQuestion(q, target) {
     if (!target) return null;
+    if (q.type === "first-goalscorer" || q.type === "first-goalscorer-" + String(q.id).split("-").pop()) {
+      const normalisePlayer = value => String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      const scorerNames = (target.athletes || []).map(normalisePlayer).filter(Boolean);
+      const match = (q.choices || []).find(choice => scorerNames.includes(normalisePlayer(choice.label)));
+      return match?.key || null;
+    }
     if (q.type === "first-goal-kick-time" || q.type === "next-goal-kick-time") return String(Math.floor((target.offset || 0) / 60));
     const f = this.room.fixture || {}, normalise = value => String(value || "").toLowerCase().replace(/\b(fc|afc|city|town|united)\\b/g, "").replace(/[^a-z0-9]/g, "");
     const targetName = normalise(target.team || target.text);
