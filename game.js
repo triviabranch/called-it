@@ -112,7 +112,7 @@ function attemptPendingJoin() {
     send({ type: "join", name: pendingName, playerId });
   }
 }
-function connect() { ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/room/${roomId}`); ws.onopen = () => { attemptPendingJoin(); setTimeout(attemptPendingJoin, 250); }; ws.onmessage = event => { const message = JSON.parse(event.data); if (message.type === "identity") { playerId = message.playerId; localStorage.setItem(`calledItPlayer:${roomId}`, playerId); attemptPendingJoin(); } if (message.state) { state = message.state; attemptPendingJoin(); render(); setTimeout(attemptPendingJoin, 0); } }; ws.onclose = () => setTimeout(connect, 1500); }
+function connect() { ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/room/${roomId}`); ws.onopen = () => { attemptPendingJoin(); setTimeout(attemptPendingJoin, 250); }; ws.onmessage = event => { const message = JSON.parse(event.data); if (message.type === "identity") { playerId = message.playerId; localStorage.setItem(`calledItPlayer:${roomId}`, playerId); attemptPendingJoin(); } if (message.state) { state = message.state; attemptPendingJoin(); render(); setTimeout(attemptPendingJoin, 0); } }; ws.onclose = () => { if (state?.session?.status === "complete") return; setTimeout(connect, 1500); }; }
 function preMatchCard(me) {
   const questions = state.playerPreMatch?.[playerId] || state.preMatch || [], answered = state.playerStatus?.[playerId] || [], current = questions.find(q => !answered.includes(q.id) && !q.settled);
   if (preMatchDismissed) return "";
