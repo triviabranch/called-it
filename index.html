@@ -64,9 +64,8 @@
             const open = fixtures.filter(f => f.state === "in" || f.accessState === "open");
             const source = open.length ? open : fixtures;
             label.textContent = open.length ? "LIVE NOW" : "TODAY";
-            track.innerHTML = source.length
-              ? source.map(f => `<span class="ticker-item"><b>${esc(f.home?.name || "Home")} v ${esc(f.away?.name || "Away")}</b><small>${time(f.date)}</small></span>`).join("")
-              : '<span class="ticker-loading">No fixtures listed today</span>';
+            const items = source.map(f => `<span class="ticker-item"><b>${esc(f.home?.name || "Home")} v ${esc(f.away?.name || "Away")}</b><small>${time(f.date)}</small></span>`).join("");
+            track.innerHTML = source.length ? (items + (source.length > 1 ? items : "")) : '<span class="ticker-loading">No fixtures listed today</span>';
             if (source.length > 1) track.classList.add("is-moving");
           } catch {
             label.textContent = "MATCHDAY";
