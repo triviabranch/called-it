@@ -457,7 +457,7 @@ export default {
     if (url.pathname === "/test" || url.pathname === "/test/") return env.ASSETS.fetch(new Request(new URL("/test/index.html", request.url), request));
     return env.ASSETS.fetch(request);
   },
-  scheduled(event, env, ctx) { ctx.waitUntil(refreshConfiguredFixtureIndexes(env)); }
+  scheduled(event, env, ctx) { ctx.waitUntil(refreshFixtureIndex(env, "gb")); }
 };
 export class FixtureIndex {
   constructor(state) { this.state = state; }
