@@ -306,10 +306,23 @@ function committedCallsModal() {
       render();
     }
   });
-  document.querySelectorAll("[data-share-result]").forEach(button => button.onclick = () => {
-    const isCalls = button.dataset.shareKind === "calls" || button.textContent.toLowerCase().includes("calls"), meNow = (state.players || []).find(p => p.id === playerId), fNow = state.fixture || {};
+  document.querySelectorAll("[data-share-result]").forEach(button => button.onclick = async event => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (button.dataset.shareBusy === "true") return;
+    const isCalls = button.dataset.shareKind === "calls" || button.textContent.toLowerCase().includes("calls"), meNow = (state.players || []).find(p => String(p.id) === String(playerId)), fNow = state.fixture || {};
     const text = isCalls ? (meNow?.name || "A player") + " made " + (meNow?.calls || 0) + " calls on Called It: " + (fNow.home?.name || "Home") + " v " + (fNow.away?.name || "Away") : (fNow.home?.name || "Home") + " " + (fNow.home?.score ?? "–") + " — " + (fNow.away?.score ?? "–") + " " + (fNow.away?.name || "Away") + " · Called It";
-    if (isCalls) shareCallsCard(); else shareResult("Called It result", text);
+    button.dataset.shareBusy = "true";
+    button.disabled = true;
+    try {
+      if (isCalls) await shareCallsCard(); else await shareResult("Called It result", text);
+    } catch (error) {
+      console.error("Called It share failed", error);
+      alert("Could not create the scorecard share. Please try again.");
+    } finally {
+      button.dataset.shareBusy = "false";
+      button.disabled = false;
+    }
   });
   document.querySelectorAll("[data-leaderboard-open]").forEach(button => button.onclick = () => { leaderboardOpen = true; render(); });
   document.querySelectorAll("[data-leaderboard-close]").forEach(button => button.onclick = event => { if (event.target === button || button.classList.contains("modal-close")) { leaderboardOpen = false; if (state.session?.status === "complete") finalLeaderboardDismissed = true; render(); } });
