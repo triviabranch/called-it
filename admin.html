@@ -27,7 +27,6 @@
         <h1>Fixture<br><i>control.</i></h1>
         <p>Refresh the fixture index and choose which competitions appear on the public fixture page. Rooms are created when a player opens a fixture.</p>
         <button id="refresh-button" class="button" type="button">Run fixture refresh <span>↻</span></button>
-        <p id="status" class="status" role="status" aria-live="polite">Ready. Select competitions, then save your settings.</p>
       </section>
       <section class="admin-config" aria-labelledby="competitions-title">
         <p class="eyebrow">Playable sports</p>
@@ -37,15 +36,16 @@
         <div id="competition-list" class="competition-list"><p class="status">Loading competitions…</p></div>
         <button id="save-config" class="button config-save" type="button">Save selected competitions</button>
       </section>
-      <section class="admin-config" aria-labelledby="broadcast-rules-title">
-        <p class="eyebrow">Eligibility rules</p>
-        <h2 id="broadcast-rules-title">Broadcast availability</h2>
-        <label class="config-toggle">
-          <input id="blackout-rule" type="checkbox" checked />
-          <span><strong>Apply the UK Saturday blackout to Premier League</strong><small>Exclude Saturday 14:45–17:15 UK kick-offs. Championship and lower leagues are not affected.</small></span>
-        </label>
-        <p id="config-status" class="status config-status" role="status" aria-live="polite">Loading saved rules…</p>
-      </section>
+      <details class="admin-config admin-collapsible" aria-labelledby="broadcast-rules-title">
+        <summary><span><p class="eyebrow">Eligibility rules</p><h2 id="broadcast-rules-title">Broadcast availability</h2></span><b aria-hidden="true">↘</b></summary>
+        <div class="collapsible-content">
+          <label class="config-toggle">
+            <input id="blackout-rule" type="checkbox" checked />
+            <span><strong>Apply the UK Saturday blackout to Premier League</strong><small>Exclude Saturday 14:45–17:15 UK kick-offs. Championship and lower leagues are not affected.</small></span>
+          </label>
+          <p id="config-status" class="status config-status" role="status" aria-live="polite">Loading saved rules…</p>
+        </div>
+      </details>
       <section class="admin-config admin-rooms" aria-labelledby="rooms-title">
         <div class="admin-section-head"><div><p class="eyebrow">Live rooms</p><h2 id="rooms-title">Rooms in play</h2></div><button id="rooms-refresh" class="button" type="button">Refresh rooms <span>↻</span></button></div>
         <p id="rooms-status" class="status config-status" role="status" aria-live="polite">Loading live rooms…</p>
