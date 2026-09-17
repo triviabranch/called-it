@@ -4,6 +4,7 @@ const result = document.querySelector("#result");
 const summary = document.querySelector("#summary");
 const coverage = document.querySelector("#coverage");
 const blackoutRule = document.querySelector("#blackout-rule");
+const minimumLeadTime = document.querySelector("#minimum-lead-time");
 const saveConfig = document.querySelector("#save-config");
 const configStatus = document.querySelector("#config-status");
 const competitionList = document.querySelector("#competition-list");
@@ -21,6 +22,7 @@ const loadConfig = async () => {
     const data = await response.json();
     if (!response.ok) throw Error(data.error || "Could not load rules");
     blackoutRule.checked = data.broadcastRules?.ukPremierLeagueSaturdayBlackout !== false;
+    minimumLeadTime.value = data.accessRules?.minimumMinutesBeforeKickoff ?? 120;
     competitionList.innerHTML = (data.competitions || []).map(item => { const key = `${item.sport}:${item.league}`; const selected = (data.enabledCompetitions || []).includes(key); return `<button class="competition-toggle" type="button" data-competition="${esc(key)}" aria-pressed="${selected ? "true" : "false"}"><span class="competition-mark" aria-hidden="true">${selected ? "✓" : "+"}</span><span><strong>${esc(item.name)}</strong><small>${esc(item.sport)} · ${esc(item.league)}</small></span></button>`; }).join("");
     configStatus.textContent = "Saved rules loaded.";
   } catch (error) { configStatus.textContent = error.message || "Could not load saved rules."; }
@@ -30,7 +32,7 @@ saveConfig.onclick = async () => {
   saveConfig.disabled = true;
   configStatus.textContent = "Saving…";
   try {
-    const response = await fetch("/api/admin/fixture-config", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ broadcastRules: { ukPremierLeagueSaturdayBlackout: blackoutRule.checked }, enabledCompetitions: [...competitionList.querySelectorAll('[data-competition][aria-pressed="true"]')].map(item => item.dataset.competition) }) });
+    const response = await fetch("/api/admin/fixture-config", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ broadcastRules: { ukPremierLeagueSaturdayBlackout: blackoutRule.checked }, accessRules: { minimumMinutesBeforeKickoff: Number(minimumLeadTime.value) }, enabledCompetitions: [...competitionList.querySelectorAll('[data-competition][aria-pressed="true"]')].map(item => item.dataset.competition) }) });
     const data = await response.json();
     if (!response.ok) throw Error(data.error || "Could not save rules");
     configStatus.textContent = "Saved. Fixture list will use these competitions on refresh.";
