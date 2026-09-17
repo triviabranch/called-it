@@ -7,6 +7,7 @@ const minimumLeadTime = document.querySelector("#minimum-lead-time");
 const saveConfig = document.querySelector("#save-config");
 const configStatus = document.querySelector("#config-status");
 const competitionList = document.querySelector("#competition-list");
+const regionList = document.querySelector("#region-list");
 const roomsRefresh = document.querySelector("#rooms-refresh");
 const roomsStatus = document.querySelector("#rooms-status");
 const roomsTable = document.querySelector("#rooms-table");
@@ -22,6 +23,7 @@ const loadConfig = async () => {
     if (!response.ok) throw Error(data.error || "Could not load rules");
     blackoutRule.checked = data.broadcastRules?.ukPremierLeagueSaturdayBlackout !== false;
     minimumLeadTime.value = data.accessRules?.minimumMinutesBeforeKickoff ?? 120;
+    regionList.innerHTML = (data.regions || []).map(item => { const selected = (data.enabledRegions || []).includes(item.code); return `<button class="competition-toggle" type="button" data-region="${esc(item.code)}" aria-pressed="${selected ? "true" : "false"}"><span class="competition-mark" aria-hidden="true">${selected ? "✓" : "+"}</span><span><strong>${esc(item.label)}</strong><small>TV market · ${esc(item.code.toUpperCase())}</small></span></button>`; }).join("");
     competitionList.innerHTML = (data.competitions || []).map(item => { const key = `${item.sport}:${item.league}`; const selected = (data.enabledCompetitions || []).includes(key); return `<button class="competition-toggle" type="button" data-competition="${esc(key)}" aria-pressed="${selected ? "true" : "false"}"><span class="competition-mark" aria-hidden="true">${selected ? "✓" : "+"}</span><span><strong>${esc(item.name)}</strong><small>${esc(item.sport)} · ${esc(item.league)}</small></span></button>`; }).join("");
     configStatus.textContent = "Saved rules loaded.";
   } catch (error) { configStatus.textContent = error.message || "Could not load saved rules."; }
@@ -31,7 +33,7 @@ saveConfig.onclick = async () => {
   saveConfig.disabled = true;
   configStatus.textContent = "Saving…";
   try {
-    const response = await fetch("/api/admin/fixture-config", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ broadcastRules: { ukPremierLeagueSaturdayBlackout: blackoutRule.checked }, accessRules: { minimumMinutesBeforeKickoff: Number(minimumLeadTime.value) }, enabledCompetitions: [...competitionList.querySelectorAll('[data-competition][aria-pressed="true"]')].map(item => item.dataset.competition) }) });
+    const response = await fetch("/api/admin/fixture-config", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ broadcastRules: { ukPremierLeagueSaturdayBlackout: blackoutRule.checked }, accessRules: { minimumMinutesBeforeKickoff: Number(minimumLeadTime.value) }, enabledRegions: [...regionList.querySelectorAll('[data-region][aria-pressed="true"]')].map(item => item.dataset.region), enabledCompetitions: [...competitionList.querySelectorAll('[data-competition][aria-pressed="true"]')].map(item => item.dataset.competition) }) });
     const data = await response.json();
     if (!response.ok) throw Error(data.error || "Could not save rules");
     configStatus.textContent = "Saved. Fixture list will use these competitions on refresh.";
@@ -40,6 +42,15 @@ saveConfig.onclick = async () => {
 };
 
 loadConfig();
+
+regionList.addEventListener("click", event => {
+  const card = event.target.closest("[data-region]");
+  if (!card) return;
+  const selected = card.getAttribute("aria-pressed") === "true";
+  card.setAttribute("aria-pressed", String(!selected));
+  const mark = card.querySelector(".competition-mark");
+  if (mark) mark.textContent = selected ? "+" : "✓";
+});
 
 competitionList.addEventListener("click", event => {
   const card = event.target.closest("[data-competition]");
