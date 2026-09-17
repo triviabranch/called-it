@@ -139,7 +139,7 @@ function showCompletedLeaderboard(fixture) {
   modal.querySelector("[data-share-result]").onclick = () => shareResult("Called It final result", fixture.home?.name + " " + (fixture.home?.score ?? "–") + " — " + (fixture.away?.score ?? "–") + " " + fixture.away?.name + " · Called It");
 }
 function showJoinModal(fixture, league) {
-  const existing = document.querySelector(".join-modal-backdrop"); if (existing) existing.remove();
+  document.querySelectorAll(".join-modal-backdrop").forEach(item => item.remove());
   const modal = document.createElement("div"); modal.className = "join-modal-backdrop";
   const liveLabel = fixture.state === "in" ? "LIVE NOW" : scheduledTime(fixture.date);
   const pendingName = localStorage.getItem(`calledItPendingName:${fixture.id}`) || "";
