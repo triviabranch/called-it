@@ -3,6 +3,9 @@
 
 
 .config-help { margin-top: -.35rem; max-width: 42rem; line-height: 1.45; opacity: .72; }
+.config-number { display:grid; gap:.45rem; max-width:22rem; margin:1rem 0 1.25rem; color:var(--ink); font:500 .68rem 'DM Mono',monospace; text-transform:uppercase; letter-spacing:.06em; }
+.config-number input { width:100%; padding:.75rem; border:1px solid rgba(7,24,45,.35); background:rgba(255,255,255,.45); color:var(--ink); font:500 1rem 'DM Mono',monospace; }
+.config-number small { color:var(--muted); font:400 .75rem/1.4 'DM Sans',sans-serif; text-transform:none; letter-spacing:0; }
 .danger-action{margin-left:.45rem!important;border-color:var(--red)!important;color:var(--red)!important}
 .competition-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; margin-top: 1rem; }
 .competition-toggle { min-width: 0; aspect-ratio: 1; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; padding: 1rem; border: 1px solid rgba(18, 31, 48, .2); border-radius: 14px; background: rgba(255, 255, 255, .28); color: var(--ink); text-align: left; cursor: pointer; transition: background .15s ease, color .15s ease, border-color .15s ease, transform .15s ease; }
