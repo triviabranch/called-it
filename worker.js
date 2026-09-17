@@ -283,11 +283,8 @@ async function pullFixtures(broadcastRules = DEFAULT_BROADCAST_RULES, enabledCom
     ? validateLeague(result.value.sport, result.value.league, result.value.events)
     : ({ sport: "unknown", league: "unknown", approved: false, checkedAt: Date.now(), sampleSize: 0, matchesWithData: 0, averageEvents: 0, coverage: {}, reason: result.reason?.message || "programme pull failed" })));
   const coverage = Object.fromEntries(coverageResults.map(result => [`${result.sport}:${result.league}`, result]));
-  // Keep a near-term catalogue in the Durable Object. The public endpoint
-  // applies the two-hour playable window below; the index must retain matches
-  // that are still outside that window so they can appear as kick-off nears
-  // without waiting for another scheduled refresh.
-  const horizon = now + 48 * 60 * 60 * 1000;
+  // Keep the complete fetched programme available to the discovery
+  // surface. The public endpoint selects today's fixtures.
   const published = programmes.flatMap(result => result.status === "fulfilled"
     ? result.value.events.map(item => {
         const config = competitionConfig(result.value.sport, result.value.league);
@@ -306,7 +303,7 @@ async function pullFixtures(broadcastRules = DEFAULT_BROADCAST_RULES, enabledCom
   const fixtures = published.filter(f => {
     const kickoff = new Date(f.date || 0).getTime();
     const isLive = f.state === "in";
-    const isUpcoming = f.state === "pre" && Number.isFinite(kickoff) && kickoff >= now && kickoff <= horizon;
+    const isUpcoming = f.state === "pre" && Number.isFinite(kickoff) && dateKey(f.date) === dateKey(now);
     return isLive || isUpcoming;
   }).sort((a, b) => {
     const byKickoff = new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime();
@@ -316,7 +313,7 @@ async function pullFixtures(broadcastRules = DEFAULT_BROADCAST_RULES, enabledCom
   });
   const completedFixtures = published.filter(f => f.state === "post" && dateKey(f.date) === dateKey(now))
     .sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime());
-  return { provider: "ESPN", fixtureIndexVersion: 5, fetchedAt: now, region: selectedRegion, regionLabel: regionInfo(selectedRegion).label, fixtures, completedFixtures, leagueCoverage: coverage, broadcastRules, enabledCompetitions: [...enabled], windowMinutes: 120, catalogueWindowMinutes: 2880 };
+  return { provider: "ESPN", fixtureIndexVersion: 6, fetchedAt: now, region: selectedRegion, regionLabel: regionInfo(selectedRegion).label, fixtures, completedFixtures, leagueCoverage: coverage, broadcastRules, enabledCompetitions: [...enabled] };
 }
 async function refreshFixtureIndex(env, region = "gb") {
   const id = env.FIXTURE_INDEX.idFromName("supported-fixtures");
