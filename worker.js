@@ -33,6 +33,26 @@ function normaliseEnabledCompetitions(values) {
 function siteBase(sport) { return `${ESPN_SITE_ROOT}/${encodeURIComponent(sport)}`; }
 function coreBase(sport, league) { return `${ESPN_CORE_ROOT}/${encodeURIComponent(sport)}/leagues/${leaguePath(league)}`; }
 const DEFAULT_BROADCAST_RULES = { ukPremierLeagueSaturdayBlackout: true };
+const DEFAULT_ACCESS_RULES = { minimumMinutesBeforeKickoff: 120 };
+function normaliseAccessRules(value) {
+  const minutes = Number(value?.minimumMinutesBeforeKickoff);
+  return { minimumMinutesBeforeKickoff: Number.isFinite(minutes) ? Math.max(0, Math.min(1440, Math.round(minutes))) : DEFAULT_ACCESS_RULES.minimumMinutesBeforeKickoff };
+}
+function applyFixtureAccess(fixture, accessRules, now = Date.now()) {
+  const minutes = normaliseAccessRules(accessRules).minimumMinutesBeforeKickoff;
+  const kickoff = Date.parse(fixture?.date);
+  if (!Number.isFinite(kickoff) || fixture?.state !== "pre") return { ...fixture, accessRules: { minimumMinutesBeforeKickoff: minutes }, accessState: "open", opensAt: null };
+  const opensAt = kickoff - minutes * 60000;
+  return { ...fixture, accessRules: { minimumMinutesBeforeKickoff: minutes }, accessState: now >= opensAt ? "open" : "locked", opensAt };
+}
+async function fixtureAccess(env, fixture) {
+  const id = env.FIXTURE_INDEX.idFromName("supported-fixtures");
+  const response = await env.FIXTURE_INDEX.get(id).fetch(new Request("https://fixture-index/config"));
+  const config = await response.json();
+  const accessRules = normaliseAccessRules(config.accessRules);
+  const opened = applyFixtureAccess(fixture, accessRules);
+  return { ...opened, locked: opened.accessState === "locked" };
+}
 const BROADCAST_REGIONS = [
   { code: "gb", espn: "uk", label: "United Kingdom" },
   { code: "au", espn: "au", label: "Australia" },
@@ -386,6 +406,8 @@ export default {
       try {
         const input = await request.json();
         if (!input.fixture?.id) return json({ error: "fixture.id is required" }, 400);
+        const opened = await fixtureAccess(env, input.fixture);
+        if (opened.locked) return json({ error: "too_early", message: "Called It has not opened for this fixture yet.", opensAt: opened.opensAt, kickoff: input.fixture.date, accessRules: opened.accessRules }, 403);
         const id = env.MATCH_ROOM.idFromName(`espn:${input.league || "eng.1"}:${input.fixture.id}`);
         return env.MATCH_ROOM.get(id).fetch(new Request("https://room/create", { method: "POST", body: JSON.stringify({ ...input, mode: input.mode === "simulation" ? "simulation" : "live" }), headers: { "content-type": "application/json" } }));
       } catch (error) { return json({ error: error.message || "Could not create fixture room" }, 400); }
@@ -395,6 +417,10 @@ export default {
       let input = null;
       try { input = JSON.parse(body); } catch { /* MatchRoom will return the validation error. */ }
       const isLiveFixture = input?.mode !== "simulation" && input?.fixture?.id;
+      if (isLiveFixture) {
+        const opened = await fixtureAccess(env, input.fixture);
+        if (opened.locked) return json({ error: "too_early", message: "Called It has not opened for this fixture yet.", opensAt: opened.opensAt, kickoff: input.fixture.date, accessRules: opened.accessRules }, 403);
+      }
       const id = isLiveFixture
         ? env.MATCH_ROOM.idFromName(`espn:${input.league || input.fixture.league || "eng.1"}:${input.fixture.id}`)
         : env.MATCH_ROOM.newUniqueId();
@@ -419,7 +445,11 @@ export class FixtureIndex {
         const saved = await this.state.storage.get("fixtureConfig") || {};
         const broadcastRules = { ...DEFAULT_BROADCAST_RULES, ...(saved.broadcastRules || await this.state.storage.get("broadcastRules") || {}) };
         const enabledCompetitions = normaliseEnabledCompetitions(saved.enabledCompetitions);
+        const accessRules = normaliseAccessRules(saved.accessRules);
         const data = await pullFixtures(broadcastRules, enabledCompetitions, region);
+        data.fixtures = (data.fixtures || []).map(fixture => applyFixtureAccess(fixture, accessRules));
+        data.completedFixtures = (data.completedFixtures || []).map(fixture => applyFixtureAccess(fixture, accessRules));
+        data.accessRules = accessRules;
         const archivedFixtures = (await this.state.storage.get("completedFixtures") || [])
           .filter(item => dateKey(item.date) === dateKey(Date.now()));
         const completedFixtures = [...new Map([...archivedFixtures, ...(data.completedFixtures || [])]
@@ -439,19 +469,20 @@ export class FixtureIndex {
     if (request.method === "GET" && new URL(request.url).pathname === "/config") {
       const saved = await this.state.storage.get("fixtureConfig") || {};
       const broadcastRules = { ...DEFAULT_BROADCAST_RULES, ...(saved.broadcastRules || await this.state.storage.get("broadcastRules") || {}) };
-      return json({ broadcastRules, enabledCompetitions: normaliseEnabledCompetitions(saved.enabledCompetitions), competitions: SUPPORTED_COMPETITIONS });
+      return json({ broadcastRules, accessRules: normaliseAccessRules(saved.accessRules), enabledCompetitions: normaliseEnabledCompetitions(saved.enabledCompetitions), competitions: SUPPORTED_COMPETITIONS });
     }
     if (request.method === "POST" && new URL(request.url).pathname === "/config") {
       try {
         const input = await request.json();
         const saved = await this.state.storage.get("fixtureConfig") || {};
         const broadcastRules = { ...DEFAULT_BROADCAST_RULES, ...(saved.broadcastRules || {}), ukPremierLeagueSaturdayBlackout: input.broadcastRules?.ukPremierLeagueSaturdayBlackout !== false };
+        const accessRules = normaliseAccessRules(input.accessRules);
         const enabledCompetitions = normaliseEnabledCompetitions(input.enabledCompetitions);
-        await this.state.storage.put("fixtureConfig", { broadcastRules, enabledCompetitions });
+        await this.state.storage.put("fixtureConfig", { broadcastRules, accessRules, enabledCompetitions });
         await this.state.storage.put("broadcastRules", broadcastRules);
         // Saving configuration is independent of the ESPN pull. The public
         // fixture page will use this selection on its next load or manual refresh.
-        return json({ broadcastRules, enabledCompetitions, saved: true });
+        return json({ broadcastRules, accessRules, enabledCompetitions, saved: true });
       } catch (error) { return json({ error: error.message || "Could not save fixture configuration" }, 400); }
     }
     if (request.method === "POST" && new URL(request.url).pathname === "/remove") {
