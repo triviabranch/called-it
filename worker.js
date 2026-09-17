@@ -355,6 +355,7 @@ async function refreshConfiguredFixtureIndexes(env) {
   const response = await env.FIXTURE_INDEX.get(id).fetch(new Request("https://fixture-index/config"));
   const config = await response.json();
   const regions = normaliseEnabledRegions(config.enabledRegions);
+  if (!regions.length) return json({ error: "Select at least one supported country before refreshing fixtures." }, 400);
   const results = await Promise.all(regions.map(region => refreshFixtureIndex(env, region)));
   const failed = results.find(result => !result.ok);
   return failed || results[0];
