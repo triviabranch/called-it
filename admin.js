@@ -21,7 +21,7 @@ const loadConfig = async () => {
     const data = await response.json();
     if (!response.ok) throw Error(data.error || "Could not load rules");
     blackoutRule.checked = data.broadcastRules?.ukPremierLeagueSaturdayBlackout !== false;
-    competitionList.innerHTML = (data.competitions || []).map(item => { const key = `${item.sport}:${item.league}`; const checked = (data.enabledCompetitions || []).includes(key); return `<label class="competition-toggle"><input type="checkbox" value="${esc(key)}" ${checked ? "checked" : ""}><span><strong>${esc(item.name)}</strong><small>${esc(item.sport)} · ${esc(item.league)}</small></span></label>`; }).join("");
+    competitionList.innerHTML = (data.competitions || []).map(item => { const key = `${item.sport}:${item.league}`; const selected = (data.enabledCompetitions || []).includes(key); return `<button class="competition-toggle" type="button" data-competition="${esc(key)}" aria-pressed="${selected ? "true" : "false"}"><span class="competition-mark" aria-hidden="true">${selected ? "✓" : "+"}</span><span><strong>${esc(item.name)}</strong><small>${esc(item.sport)} · ${esc(item.league)}</small></span></button>`; }).join("");
     configStatus.textContent = "Saved rules loaded.";
   } catch (error) { configStatus.textContent = error.message || "Could not load saved rules."; }
 };
@@ -30,7 +30,7 @@ saveConfig.onclick = async () => {
   saveConfig.disabled = true;
   configStatus.textContent = "Saving…";
   try {
-    const response = await fetch("/api/admin/fixture-config", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ broadcastRules: { ukPremierLeagueSaturdayBlackout: blackoutRule.checked }, enabledCompetitions: [...competitionList.querySelectorAll("input:checked")].map(input => input.value) }) });
+    const response = await fetch("/api/admin/fixture-config", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ broadcastRules: { ukPremierLeagueSaturdayBlackout: blackoutRule.checked }, enabledCompetitions: [...competitionList.querySelectorAll('[data-competition][aria-pressed="true"]')].map(item => item.dataset.competition) }) });
     const data = await response.json();
     if (!response.ok) throw Error(data.error || "Could not save rules");
     configStatus.textContent = "Saved. Fixture list will use these competitions on refresh.";
@@ -39,6 +39,15 @@ saveConfig.onclick = async () => {
 };
 
 loadConfig();
+
+competitionList.addEventListener("click", event => {
+  const card = event.target.closest("[data-competition]");
+  if (!card) return;
+  const selected = card.getAttribute("aria-pressed") === "true";
+  card.setAttribute("aria-pressed", String(!selected));
+  const mark = card.querySelector(".competition-mark");
+  if (mark) mark.textContent = selected ? "+" : "✓";
+});
 
 let liveRooms = [];
 const roomLabel = room => `${room.fixture?.home?.name || "Home"} v ${room.fixture?.away?.name || "Away"}`;
