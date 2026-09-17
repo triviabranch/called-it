@@ -297,7 +297,10 @@ async function pullFixtures(broadcastRules = DEFAULT_BROADCAST_RULES, enabledCom
       })
     : []).filter(f => {
       const coverageKey = `${f.sport}:${f.league}`;
-      return f.televised === true && coverage[coverageKey]?.approved
+      // Discovery and event-coverage validation are separate concerns. A
+      // fixture must not disappear from the catalogue merely because the
+      // rolling play sample is unavailable for its competition.
+      return f.televised === true
         && (!broadcastRules.ukPremierLeagueSaturdayBlackout || f.league !== "eng.1" || !inUkSaturdayClosedPeriod(f.date));
     });
   const fixtures = published.filter(f => {
@@ -347,11 +350,15 @@ async function liveFixtures(request, env) {
     response = await env.FIXTURE_INDEX.get(id).fetch(new Request(`https://fixture-index/fixtures?region=${region}`));
     data = await response.json();
   }
-  const now = Date.now(), horizon = now + 2 * 60 * 60 * 1000, staleCutoff = now - 5 * 3600000;
+  const now = Date.now(), staleCutoff = now - 5 * 3600000, today = dateKey(now);
+  // The fixture page is a day catalogue. Keep every supported fixture for
+  // today's UK/local-region date; the two-hour rule belongs to live gameplay,
+  // not discovery.
   data.fixtures = (data.fixtures || []).filter(item => {
     const kickoff = new Date(item.date || 0).getTime();
+    const isToday = dateKey(item.date) === today;
     const isLive = item.state === "in" && kickoff > staleCutoff;
-    const isUpcoming = item.state === "pre" && Number.isFinite(kickoff) && kickoff >= now && kickoff <= horizon;
+    const isUpcoming = item.state === "pre" && Number.isFinite(kickoff) && isToday;
     return isLive || isUpcoming;
   });
   return json(data, response.status);
