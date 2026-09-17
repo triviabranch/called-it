@@ -156,6 +156,13 @@ function showOpeningModal(fixture) {
   };
 }
 function showJoinModal(fixture, league) {
+  // A join modal is never valid before the backend opening time. This guard
+  // prevents stale cards or duplicate click handlers from exposing the name
+  // form for a locked fixture.
+  if (fixture?.accessState === "locked" || (fixture?.opensAt && Date.now() < Number(fixture.opensAt))) {
+    showOpeningModal(fixture);
+    return;
+  }
   document.querySelectorAll(".join-modal-backdrop").forEach(item => item.remove());
   const modal = document.createElement("div"); modal.className = "join-modal-backdrop";
   const liveLabel = fixture.state === "in" ? "LIVE NOW" : scheduledTime(fixture.date);
@@ -178,7 +185,7 @@ async function joinFixture(fixture, league, name = "") {
   if (!fixture) return;
   if (name) localStorage.setItem(`calledItPendingName:${fixture.id}`, name);
   const button = document.querySelector(`[data-fixture="${CSS.escape(fixture.id)}"] .fixture-open`); if (button) button.disabled = true;
-  try { const response = await fetch("/api/room/fixture", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({ fixture, sport: fixture.sport || "soccer", league, mode:"live" }) }); const data = await response.json().catch(() => ({})); if (data.error === "too_early") { if (button) button.disabled = false; showOpeningModal({ ...fixture, opensAt: data.opensAt }); return; } if (!response.ok || !data.roomId) throw Error(data.error || "Could not open fixture room"); location.href = `/play/${encodeURIComponent(data.roomId)}`; } catch (error) { if (button) button.disabled = false; alert(error.message); }
+  try { const response = await fetch("/api/room/fixture", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({ fixture, sport: fixture.sport || "soccer", league, mode:"live" }) }); const data = await response.json().catch(() => ({})); if (data.error === "too_early" || data.opensAt) { if (button) button.disabled = false; showOpeningModal({ ...fixture, opensAt: data.opensAt }); return; } if (!response.ok || !data.roomId) throw Error(data.error || "Could not open fixture room"); location.href = `/play/${encodeURIComponent(data.roomId)}`; } catch (error) { if (button) button.disabled = false; alert(error.message); }
 }
 function attemptPendingJoin() {
   if (!state?.fixture?.id || !playerId || pendingJoinSent) return;
