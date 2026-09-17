@@ -80,6 +80,12 @@ function regionInfo(value) {
   return REGION_BY_CODE[code];
 }
 function broadcastsForFixture(fixture, config, region) {
+  // ESPN can return a national/US broadcaster even when the request is for
+  // the UK. Apply authoritative UK competition mappings before trusting that
+  // payload.
+  if (region === "gb" && config.league === "eng.league_cup") {
+    return [{ name: "Sky Sports+", market: "uk" }];
+  }
   if (fixture.broadcasts?.length) return fixture.broadcasts;
   return REGION_BROADCAST_FALLBACKS[region]?.[config.league] || [];
 }
