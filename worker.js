@@ -62,6 +62,11 @@ const BROADCAST_REGIONS = [
   { code: "ie", espn: "ie", label: "Ireland" }
 ];
 const REGION_BY_CODE = Object.fromEntries(BROADCAST_REGIONS.map(item => [item.code, item]));
+const DEFAULT_ENABLED_REGIONS = BROADCAST_REGIONS.map(item => item.code);
+function normaliseEnabledRegions(values) {
+  const selected = Array.isArray(values) ? values : DEFAULT_ENABLED_REGIONS;
+  return [...new Set(selected)].filter(code => REGION_BY_CODE[code]);
+}
 const COUNTRY_TO_REGION = { GB: "gb", UK: "gb", AU: "au", US: "us", CA: "ca", NZ: "nz", IE: "ie" };
 const REGION_BROADCAST_FALLBACKS = {
   gb: {
@@ -345,6 +350,15 @@ async function refreshFixtureIndex(env, region = "gb") {
   const id = env.FIXTURE_INDEX.idFromName("supported-fixtures");
   return env.FIXTURE_INDEX.get(id).fetch("https://fixture-index/refresh", { method: "POST", body: JSON.stringify({ region: normaliseRegion(region) }), headers: { "content-type": "application/json" } });
 }
+async function refreshConfiguredFixtureIndexes(env) {
+  const id = env.FIXTURE_INDEX.idFromName("supported-fixtures");
+  const response = await env.FIXTURE_INDEX.get(id).fetch(new Request("https://fixture-index/config"));
+  const config = await response.json();
+  const regions = normaliseEnabledRegions(config.enabledRegions);
+  const results = await Promise.all(regions.map(region => refreshFixtureIndex(env, region)));
+  const failed = results.find(result => !result.ok);
+  return failed || results[0];
+}
 async function archiveCompletedFixture(env, fixture, leaderboard) {
   if (!env?.FIXTURE_INDEX || !fixture?.id) return;
   const id = env.FIXTURE_INDEX.idFromName("supported-fixtures");
@@ -364,6 +378,9 @@ async function liveFixtures(request, env) {
   const requestedRegion = url.searchParams.get("region");
   const region = requestedRegion ? normaliseRegion(requestedRegion) : regionForRequest(request);
   const id = env.FIXTURE_INDEX.idFromName("supported-fixtures");
+  const configResponse = await env.FIXTURE_INDEX.get(id).fetch(new Request("https://fixture-index/config"));
+  const config = await configResponse.json();
+  if (!normaliseEnabledRegions(config.enabledRegions).includes(region)) return json({ error: `${regionInfo(region).label} is not currently supported` }, 403);
   // The fixture page is the discovery surface. Pull the current programme when
   // it is opened so today's fixtures do not depend on the background cron.
   let response = await refreshFixtureIndex(env, region);
@@ -395,7 +412,7 @@ export default {
       return json({ buildId: String(id).slice(0, 12) });
     }
     if (url.pathname === "/admin" || url.pathname === "/admin/") return env.ASSETS.fetch(new Request(new URL("/admin.html", request.url), request));
-    if (url.pathname === "/api/admin/refresh-fixtures" && request.method === "POST") return refreshFixtureIndex(env);
+    if (url.pathname === "/api/admin/refresh-fixtures" && request.method === "POST") return refreshConfiguredFixtureIndexes(env);
     if (url.pathname === "/api/admin/live-rooms" && request.method === "GET") { const id = env.FIXTURE_INDEX.idFromName("supported-fixtures"); return env.FIXTURE_INDEX.get(id).fetch(new Request("https://fixture-index/live-rooms")); }
     if (url.pathname === "/api/admin/kill-room" && request.method === "POST") {
       try {
@@ -439,7 +456,7 @@ export default {
     if (url.pathname === "/test" || url.pathname === "/test/") return env.ASSETS.fetch(new Request(new URL("/test/index.html", request.url), request));
     return env.ASSETS.fetch(request);
   },
-  scheduled(event, env, ctx) { ctx.waitUntil(refreshFixtureIndex(env, "gb")); }
+  scheduled(event, env, ctx) { ctx.waitUntil(refreshConfiguredFixtureIndexes(env)); }
 };
 export class FixtureIndex {
   constructor(state) { this.state = state; }
@@ -451,11 +468,13 @@ export class FixtureIndex {
         const saved = await this.state.storage.get("fixtureConfig") || {};
         const broadcastRules = { ...DEFAULT_BROADCAST_RULES, ...(saved.broadcastRules || await this.state.storage.get("broadcastRules") || {}) };
         const enabledCompetitions = normaliseEnabledCompetitions(saved.enabledCompetitions);
+        const enabledRegions = normaliseEnabledRegions(saved.enabledRegions);
         const accessRules = normaliseAccessRules(saved.accessRules);
         const data = await pullFixtures(broadcastRules, enabledCompetitions, region);
         data.fixtures = (data.fixtures || []).map(fixture => applyFixtureAccess(fixture, accessRules));
         data.completedFixtures = (data.completedFixtures || []).map(fixture => applyFixtureAccess(fixture, accessRules));
         data.accessRules = accessRules;
+        data.enabledRegions = enabledRegions;
         const archivedFixtures = (await this.state.storage.get("completedFixtures") || [])
           .filter(item => dateKey(item.date) === dateKey(Date.now()));
         const completedFixtures = [...new Map([...archivedFixtures, ...(data.completedFixtures || [])]
@@ -475,7 +494,7 @@ export class FixtureIndex {
     if (request.method === "GET" && new URL(request.url).pathname === "/config") {
       const saved = await this.state.storage.get("fixtureConfig") || {};
       const broadcastRules = { ...DEFAULT_BROADCAST_RULES, ...(saved.broadcastRules || await this.state.storage.get("broadcastRules") || {}) };
-      return json({ broadcastRules, accessRules: normaliseAccessRules(saved.accessRules), enabledCompetitions: normaliseEnabledCompetitions(saved.enabledCompetitions), competitions: SUPPORTED_COMPETITIONS });
+      return json({ broadcastRules, accessRules: normaliseAccessRules(saved.accessRules), enabledCompetitions: normaliseEnabledCompetitions(saved.enabledCompetitions), enabledRegions: normaliseEnabledRegions(saved.enabledRegions), regions: BROADCAST_REGIONS, competitions: SUPPORTED_COMPETITIONS });
     }
     if (request.method === "POST" && new URL(request.url).pathname === "/config") {
       try {
@@ -484,11 +503,12 @@ export class FixtureIndex {
         const broadcastRules = { ...DEFAULT_BROADCAST_RULES, ...(saved.broadcastRules || {}), ukPremierLeagueSaturdayBlackout: input.broadcastRules?.ukPremierLeagueSaturdayBlackout !== false };
         const accessRules = normaliseAccessRules(input.accessRules);
         const enabledCompetitions = normaliseEnabledCompetitions(input.enabledCompetitions);
-        await this.state.storage.put("fixtureConfig", { broadcastRules, accessRules, enabledCompetitions });
+        const enabledRegions = normaliseEnabledRegions(input.enabledRegions);
+        await this.state.storage.put("fixtureConfig", { broadcastRules, accessRules, enabledCompetitions, enabledRegions });
         await this.state.storage.put("broadcastRules", broadcastRules);
         // Saving configuration is independent of the ESPN pull. The public
         // fixture page will use this selection on its next load or manual refresh.
-        return json({ broadcastRules, accessRules, enabledCompetitions, saved: true });
+        return json({ broadcastRules, accessRules, enabledCompetitions, enabledRegions, saved: true });
       } catch (error) { return json({ error: error.message || "Could not save fixture configuration" }, 400); }
     }
     if (request.method === "POST" && new URL(request.url).pathname === "/remove") {
