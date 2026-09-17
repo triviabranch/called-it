@@ -483,6 +483,12 @@ export class FixtureIndex {
           .map(item => [String(item.id), item])).values()];
         data.completedFixtures = completedFixtures;
         await this.state.storage.put("completedFixtures", completedFixtures);
+        const previous = await this.state.storage.get(`index:${region}`);
+        const dataIsEmpty = !(data.fixtures || []).length && !(data.completedFixtures || []).length;
+        const previousIsSameDay = previous?.fetchedAt && dateKey(previous.fetchedAt) === dateKey(Date.now());
+        if (dataIsEmpty && previousIsSameDay && ((previous.fixtures || []).length || (previous.completedFixtures || []).length)) {
+          return json({ ...previous, refreshed: false, retainedPrevious: true });
+        }
         await this.state.storage.put(`index:${region}`, data);
         return json({ ...data, refreshed: true });
       } catch (error) { return json({ error: error.message || "Could not refresh fixture index" }, 502); }
