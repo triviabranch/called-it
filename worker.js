@@ -213,6 +213,33 @@ function normaliseCorePlay(item, index) { return normaliseEvent({ ...item, text:
 function normaliseCommentary(item, index) { const play = item?.play || item; return normaliseEvent({ ...play, clock: play.clock || item.time, text: item.text || play.text || play.shortText }, index, "commentary"); }
 function meaningful(item) { return eventType(item) !== "other"; }
 
+function normaliseTeamName(value) {
+  return String(value || "").toLowerCase().replace(/\b(fc|afc|city|town|united)\b/g, "").replace(/[^a-z0-9]/g, "");
+}
+
+function opposingTeam(team, fixture) {
+  const target = normaliseTeamName(team);
+  const home = fixture?.home?.name || "";
+  const away = fixture?.away?.name || "";
+  if (!target) return null;
+  if (normaliseTeamName(home).includes(target) || target.includes(normaliseTeamName(home))) return away || null;
+  if (normaliseTeamName(away).includes(target) || target.includes(normaliseTeamName(away))) return home || null;
+  return null;
+}
+
+function foulCommittingTeam(event, fixture) {
+  if (event?.type !== "foul") return event?.team || null;
+  const text = String(event?.text || "").toLowerCase();
+  const explicitOffender = text.match(/(?:^|\b)([^.]+?)\s+(?:commits?|committed|fouls?)\s+(?:a\s+)?foul\b/i);
+  if (explicitOffender && event.team && !/wins?|draws?|earns?|awarded|on\b/i.test(explicitOffender[1])) return event.team;
+  // ESPN commonly reports the fouled player/team, e.g. “Allan (Manchester
+  // City) wins a foul”. The opponent is the team that committed it.
+  if (/\b(?:wins?|draws?|earns?|is awarded)\s+(?:a\s+)?foul\b|\bfoul\s+on\b|\bfouled\b/.test(text)) {
+    return opposingTeam(event.team, fixture) || null;
+  }
+  return event.team || null;
+}
+
 async function espnApi(url) {
   try {
     const bits = url.pathname.split("/").filter(Boolean);
@@ -609,7 +636,7 @@ export class MatchRoom {
         if (input.fixture) {
           this.room.fixture = input.fixture;
           this.room.provider = { name: "ESPN", sport: input.sport || input.fixture.sport || "soccer", league: input.league || "eng.1", eventId: input.fixture.id, error: null };
-          this.room.timeline = (input.events || []).filter(e => e && e.offset != null).map(e => ({ id: String(e.id), type: e.type, offset: Number(e.offset), minute: e.minute, text: e.text, team: e.team || null, athletes: e.athletes || [] })); this.room.mode = input.mode === "simulation" ? "simulation" : "live"; this.room.speed = Math.max(1, Math.min(50, Number(input.speed) || 1)); this.room.session.mode = this.room.mode; this.room.session.speed = this.room.speed; this.room.session.manualPaused = false; this.room.preMatch = this.buildPreMatch();
+          this.room.timeline = (input.events || []).filter(e => e && e.offset != null).map(e => ({ id: String(e.id), type: e.type, offset: Number(e.offset), minute: e.minute, text: e.text, team: e.team || null, committingTeam: foulCommittingTeam(e, this.room.fixture), athletes: e.athletes || [] })); this.room.mode = input.mode === "simulation" ? "simulation" : "live"; this.room.speed = Math.max(1, Math.min(50, Number(input.speed) || 1)); this.room.session.mode = this.room.mode; this.room.session.speed = this.room.speed; this.room.session.manualPaused = false; this.room.preMatch = this.buildPreMatch();
           this.room.session.status = this.room.fixture.state === "in" ? "lobby" : "lobby";
         }
       } catch {}
@@ -768,13 +795,14 @@ export class MatchRoom {
             minute: event.minute ?? existing.minute,
             text: event.text || existing.text,
             team: event.team || existing.team || null,
+            committingTeam: event.type === "foul" ? (foulCommittingTeam(event, this.room.fixture) || existing.committingTeam || null) : (event.team || existing.committingTeam || null),
             athletes: event.athletes?.length ? event.athletes : (existing.athletes || [])
           });
           byId.set(String(event.id), existing);
           byShape.set(key, existing);
           continue;
         }
-        const canonical = { id: event.id, type: event.type, offset: event.offset, minute: event.minute, text: event.text, team: event.team || null, athletes: event.athletes || [] };
+        const canonical = { id: event.id, type: event.type, offset: event.offset, minute: event.minute, text: event.text, team: event.team || null, committingTeam: foulCommittingTeam(event, this.room.fixture), athletes: event.athletes || [] };
         this.room.timeline.push(canonical);
         byId.set(String(event.id), canonical);
         byShape.set(key, canonical);
@@ -885,8 +913,8 @@ export class MatchRoom {
       return match?.key || null;
     }
     if (q.type === "first-goal-kick-time" || q.type === "next-goal-kick-time") return String(Math.floor((target.offset || 0) / 60));
-    const f = this.room.fixture || {}, normalise = value => String(value || "").toLowerCase().replace(/\b(fc|afc|city|town|united)\\b/g, "").replace(/[^a-z0-9]/g, "");
-    const targetName = normalise(target.team || target.text);
+    const f = this.room.fixture || {}, normalise = normaliseTeamName;
+    const targetName = normalise(target.type === "foul" ? (target.committingTeam || foulCommittingTeam(target, f)) : (target.team || target.text));
     const homeName = normalise(f.home?.name), awayName = normalise(f.away?.name);
     if (targetName && homeName && (targetName.includes(homeName) || homeName.includes(targetName))) return "home";
     if (targetName && awayName && (targetName.includes(awayName) || awayName.includes(targetName))) return "away";
