@@ -246,3 +246,5 @@ h1,h2,.card h2,.match-header h1,.call-modal h2,.leaderboard-modal h2{font-family
 
 /* Centre the player identity above the score */
 .calls-modal .calls-modal-title{text-align:center}
+
+.opening-fixture{margin:1.25rem 0 .6rem;font:400 clamp(1.6rem,5vw,2.4rem)/1.05 'Libre Baskerville',serif;letter-spacing:-.04em}.opening-fixture i{color:var(--red)}.opening-time{margin:0 0 1rem;font:400 clamp(1.25rem,4vw,1.8rem)/1.15 'Libre Baskerville',serif}.opening-time i{color:var(--red);font-style:normal}
