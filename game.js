@@ -188,18 +188,19 @@ async function joinFixture(fixture, league, name = "") {
   try { const response = await fetch("/api/room/fixture", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({ fixture, sport: fixture.sport || "soccer", league, mode:"live" }) }); const data = await response.json().catch(() => ({})); if (data.error === "too_early" || data.opensAt) { if (button) button.disabled = false; showOpeningModal({ ...fixture, opensAt: data.opensAt }); return; } if (!response.ok || !data.roomId) throw Error(data.error || "Could not open fixture room"); location.href = `/play/${encodeURIComponent(data.roomId)}`; } catch (error) { if (button) button.disabled = false; alert(error.message); }
 }
 function attemptPendingJoin() {
-  if (!state?.fixture?.id || !playerId || pendingJoinSent) return;
-  const pendingName = localStorage.getItem(`calledItPendingName:${state.fixture.id}`)?.trim();
-  const alreadyJoined = (state.players || []).some(player => String(player.id) === String(playerId));
-  if (!alreadyJoined && pendingName) {
+  if (!state?.fixture?.id || pendingJoinSent) return;
+  const pendingName = localStorage.getItem(`calledItPendingName:${state.fixture.id}`)?.trim() || "";
+  const playerToken = localStorage.getItem(`calledItPlayerToken:${roomId}`) || "";
+  const alreadyJoined = playerId && (state.players || []).some(player => String(player.id) === String(playerId));
+  if (playerToken || (!alreadyJoined && pendingName) || (playerId && alreadyJoined && !playerToken)) {
     pendingJoinSent = true;
     joinModalOpen = false;
     joinModalDismissed = true;
-    localStorage.removeItem(`calledItPendingName:${state.fixture.id}`);
-    send({ type: "join", name: pendingName, playerId });
+    if (pendingName) localStorage.removeItem(`calledItPendingName:${state.fixture.id}`);
+    send({ type: "join", name: pendingName, playerId: playerId || "", playerToken });
   }
 }
-function connect() { ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/room/${roomId}`); ws.onopen = () => { attemptPendingJoin(); setTimeout(attemptPendingJoin, 250); }; ws.onmessage = event => { const message = JSON.parse(event.data); if (message.type === "identity") { playerId = message.playerId; localStorage.setItem(`calledItPlayer:${roomId}`, playerId); attemptPendingJoin(); } if (message.state) { state = message.state; attemptPendingJoin(); render(); setTimeout(attemptPendingJoin, 0); } }; ws.onclose = () => { if (state?.session?.status === "complete") return; setTimeout(connect, 1500); }; }
+function connect() { ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/room/${roomId}`); ws.onopen = () => { pendingJoinSent = false; attemptPendingJoin(); setTimeout(attemptPendingJoin, 250); }; ws.onmessage = event => { const message = JSON.parse(event.data); if (message.type === "identity") { playerId = message.playerId; localStorage.setItem(`calledItPlayer:${roomId}`, playerId); if (message.playerToken) localStorage.setItem(`calledItPlayerToken:${roomId}`, message.playerToken); attemptPendingJoin(); } if (message.state) { state = message.state; attemptPendingJoin(); render(); setTimeout(attemptPendingJoin, 0); } }; ws.onclose = () => { if (state?.session?.status === "complete") return; setTimeout(connect, 1500); }; }
 function preMatchCard(me) {
   const questions = state.playerPreMatch?.[playerId] || state.preMatch || [], answered = state.playerStatus?.[playerId] || [], current = questions.find(q => !answered.includes(q.id) && !q.settled);
   if (preMatchDismissed) return "";
