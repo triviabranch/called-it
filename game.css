@@ -285,3 +285,12 @@ h1,h2,.card h2,.match-header h1,.call-modal h2,.leaderboard-modal h2{font-family
     right:auto;
   }
 }
+
+
+/* Keep LIVE and LEADERBOARD on one compact card header row */
+.match-header-leaderboard{top:12px}
+.match-header h1{padding-top:38px}
+@media(max-width:500px){
+  .match-header-leaderboard{top:10px}
+  .match-header h1{padding-top:34px}
+}
