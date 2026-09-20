@@ -731,6 +731,15 @@ export class MatchRoom {
     };
     const committedCalls = this.room.players.map(player => {
       const predictions = this.room.predictions[player.id] || {}, calls = [];
+      const knownQuestions = [...(this.room.preMatch || []), ...(this.room.playerPreMatch?.[player.id] || []), ...(this.room.session?.rounds || []), this.room.session?.round].filter(Boolean);
+      if (Array.isArray(player.callRecords) && player.callRecords.length) {
+        const recordedCalls = player.callRecords.map(record => {
+          const question = knownQuestions.find(item => String(item.id) === String(record.id));
+          const answer = record.answer;
+          return { id: record.id, question: record.question || question?.question || "Question unavailable", answer: answerLabel(record.choices?.length ? { choices: record.choices } : question, answer), status: question ? statusFor(question, answer) : "Committed", matchTime: record.matchTime || "IN PLAY" };
+        });
+        return { id: player.id, name: player.name, calls: recordedCalls, points: player.points || 0, correct: player.correct || 0 };
+      }
       const added = new Set();
       const addCall = (id, question, answer, status, matchTime) => {
         if (answer == null || added.has(String(id))) return;
