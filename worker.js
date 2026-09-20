@@ -927,7 +927,13 @@ export class MatchRoom {
         if (candidate) invalidGoalIds.add(String(candidate.id));
       }
       if (invalidGoalIds.size) {
-        this.room.timeline = this.room.timeline.filter(event => !invalidGoalIds.has(String(event.id)));
+        // Keep the raw event history intact. VAR changes its validity, not its provenance.
+        for (const event of this.room.timeline) {
+          if (invalidGoalIds.has(String(event.id))) {
+            event.valid = false;
+            event.invalidated = true;
+          }
+        }
         const allRounds = [...(this.room.session?.rounds || []), this.room.session?.round].filter(Boolean);
         for (const round of allRounds) {
           if (!invalidGoalIds.has(String(round.result?.eventId))) continue;
@@ -947,7 +953,7 @@ export class MatchRoom {
       this.room.timeline.sort((a, b) => a.offset - b.offset);
       const homeName = String(this.room.fixture.home?.name || "").toLowerCase();
       const awayName = String(this.room.fixture.away?.name || "").toLowerCase();
-      const goals = this.room.timeline.filter(event => event.type === "goal");
+      const goals = this.room.timeline.filter(event => event.type === "goal" && event.valid !== false && !event.invalidated);
       const homeGoals = goals.filter(event => String(event.team || "").toLowerCase() === homeName).length;
       const awayGoals = goals.filter(event => String(event.team || "").toLowerCase() === awayName).length;
       if (homeGoals || awayGoals || this.room.timeline.some(event => event.type === "goal")) {
@@ -1199,6 +1205,7 @@ export class MatchRoom {
     const baseline = new Set((round.baselineEventIds || []).map(String));
     return this.room.timeline.find(event => {
       if (String(event.type) !== String(round.targetType)) return false;
+      if (event.valid === false || event.invalidated) return false;
       if (baseline.has(String(event.id))) return false;
       // The baseline is authoritative. A provider event can arrive with
       // a clock slightly behind our room clock; if it was not present when
