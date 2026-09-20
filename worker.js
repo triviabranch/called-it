@@ -192,7 +192,7 @@ function eventType(item) {
   if (item?.yellowCard || /yellow.?card|caution|booking/.test(kind)) return "card";
   if (item?.substitution || /substitut/.test(kind)) return "substitution";
   if (/corner/.test(kind)) return "corner";
-  if (/foul|free.?kick/.test(kind)) return "foul";
+  if (/foul/.test(kind)) return "foul";
   if (/offside/.test(kind)) return "offside";
   if (/shot|save|miss|block/.test(kind)) return "shot";
   if (/var|video/.test(kind)) return "var";
@@ -203,7 +203,7 @@ function eventType(item) {
   if (/goal kick/.test(text)) return "goal-kick";
   if (/(scores|scored|penalty kick goal|own goal|goal!)/.test(text) && !/goal kick/.test(text)) return "goal";
   if (/corner/.test(text)) return "corner";
-  if (/foul|free kick/.test(text)) return "foul";
+  if (/foul/.test(text)) return "foul";
   if (/yellow card|red card|caution|booking|sent off/.test(text)) return "card";
   if (/substitut|replaced by/.test(text)) return "substitution";
   if (/offside/.test(text)) return "offside";
@@ -222,7 +222,10 @@ function normaliseEvent(item, index, source) {
     const athlete = player?.athlete || player?.player || player;
     return athlete?.displayName || athlete?.fullName || athlete?.shortName || athlete?.name || (typeof athlete === "string" ? athlete : "");
   }).filter(Boolean))];
-  const team = item?.team?.displayName || item?.team?.shortDisplayName || item?.team?.name || item?.competitor?.team?.displayName || item?.competitor?.displayName || null;
+  const textTeam = String(text).match(/\(([^)]+)\)/)?.[1]
+    || String(text).match(/^Corner(?:\s+awarded)?[,]?\s+([^.;]+?)(?:\.|$)/i)?.[1]?.trim()
+    || null;
+  const team = item?.team?.displayName || item?.team?.shortDisplayName || item?.team?.name || item?.competitor?.team?.displayName || item?.competitor?.displayName || textTeam;
   return { id: String(item?.id || (source + "-" + index)), source, type: eventType(item), offset, minute, period: item?.period?.number || item?.period?.displayValue || null, text, athletes, team, valid: item?.valid !== false, scoringPlay: Boolean(item?.scoringPlay), raw: item };
 }
 function normaliseCorePlay(item, index) { return normaliseEvent({ ...item, text: item.text || item.shortText || item.alternativeText || item.type?.text }, index, "core-play"); }
@@ -1210,19 +1213,21 @@ export class MatchRoom {
   }
   eventForLiveRound(round) {
     const baseline = new Set((round.baselineEventIds || []).map(String));
+    const presentedAtClock = round.presentedAtClock == null ? NaN : Number(round.presentedAtClock);
     return this.room.timeline.find(event => {
       if (String(event.type) !== String(round.targetType)) return false;
       if (event.valid === false || event.invalidated) return false;
-      if (baseline.has(String(event.id))) return false;
-      // The baseline is authoritative. A provider event can arrive with
-      // a clock slightly behind our room clock; if it was not present when
-      // this call opened, it is still the event that resolves the call.
-      return true;
+      // A room can receive a backfill containing an event that was already in
+      // the baseline, especially after a reconnect. The call's presented
+      // match time is the authoritative boundary; baseline IDs are only the
+      // fallback for older persisted rounds without that clock.
+      if (Number.isFinite(presentedAtClock)) return Number(event.offset) > presentedAtClock;
+      return !baseline.has(String(event.id));
     }) || null;
   }
   async settleLiveRound(round, deferIO = false) {
     const target = this.eventForLiveRound(round);
-    const correct = target ? this.keyForQuestion({ type: "first-goal-team" }, target) : null;
+    const correct = target ? this.keyForQuestion({ type: round.targetType }, target) : null;
     round.result = { correct, event: target?.text || `No ${round.targetType} recorded during the call`, eventId: target?.id || null }; round.status = "settled";
     for (const p of this.room.players) { const answer = this.room.predictions[p.id]?.[round.id]; if (correct && answer === correct) { p.points = (p.points || 0) + 100; p.correct = (p.correct || 0) + 1; } if (answer) p.rounds = (p.rounds || 0) + 1; }
     this.rebuildLeaderboard(); this.room.events.unshift({ label: "Prediction settled", detail: round.result.event });
