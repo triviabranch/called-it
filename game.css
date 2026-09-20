@@ -248,3 +248,27 @@ h1,h2,.card h2,.match-header h1,.call-modal h2,.leaderboard-modal h2{font-family
 .calls-modal .calls-modal-title{text-align:center}
 
 .opening-fixture{margin:1.25rem 0 .6rem;font:400 clamp(1.6rem,5vw,2.4rem)/1.05 'Libre Baskerville',serif;letter-spacing:-.04em}.opening-fixture i{color:var(--red)}.opening-time{margin:0 0 1rem;font:400 clamp(1.25rem,4vw,1.8rem)/1.15 'Libre Baskerville',serif}.opening-time i{color:var(--red);font-style:normal}
+
+/* Live card header: status and leaderboard now live inside the match card */
+.match-header{position:relative}
+.match-header-leaderboard{
+  position:absolute;
+  top:43px;
+  right:20px;
+  z-index:3;
+  width:auto;
+  margin:0;
+  padding:7px 10px;
+  background:transparent;
+  color:var(--paper);
+  border:1px solid rgba(238,232,220,.58);
+  font:11px monospace;
+  text-transform:uppercase;
+  letter-spacing:.06em;
+}
+.match-header-leaderboard span{color:var(--yellow)}
+.match-header h1{padding-top:52px}
+@media(max-width:500px){
+  .match-header-leaderboard{top:39px;right:14px;padding:6px 9px}
+  .match-header h1{padding-top:48px}
+}
