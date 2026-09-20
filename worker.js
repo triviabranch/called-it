@@ -704,9 +704,25 @@ export class MatchRoom {
   async load() {
     this.room = await this.state.storage.get("room") || {
       createdAt: Date.now(), lastActivity: Date.now(), fixture: null, provider: { name: "ESPN", league: "eng.1", eventId: null, error: null },
-      timeline: [], preMatch: [], mode: "live", speed: 1, session: { status: "lobby", startedAt: null, round: null, clock: 0, clockBase: 0, speed: 1 }, players: [], predictions: {}, leaderboard: [],
+      timeline: [], preMatch: [], callArchive: [], mode: "live", speed: 1, session: { status: "lobby", startedAt: null, round: null, clock: 0, clockBase: 0, speed: 1 }, players: [], predictions: {}, leaderboard: [],
       events: [{ label: "Fixture room opened", detail: "Live data from ESPN" }], lastProviderEventIds: [], lastLivePollAt: 0
     };
+    this.room.callArchive ||= [];
+    const knownRounds = [...(this.room.session?.rounds || []), this.room.session?.round].filter(Boolean);
+    for (const round of knownRounds) {
+      if (!this.room.callArchive.some(call => String(call.id) === String(round.id))) {
+        this.room.callArchive.push({
+          id: round.id,
+          question: round.question,
+          type: round.targetType,
+          choices: (round.choices || []).map(choice => ({ key: choice.key, label: choice.label })),
+          presentedAtClock: round.presentedAtClock ?? null,
+          presentedAtClockDisplay: round.presentedAtClockDisplay ?? null,
+          presentedMatchTime: round.presentedMatchTime || null,
+          openedAt: round.openedAt || null
+        });
+      }
+    }
   }
   async save() { this.room.lastActivity = Date.now(); await this.state.storage.put("room", this.room); await this.state.storage.setAlarm(Date.now() + 7200000); await this.syncAdminRoom(); }
   async syncAdminRoom(force = false) {
@@ -731,7 +747,7 @@ export class MatchRoom {
     };
     const committedCalls = this.room.players.map(player => {
       const predictions = this.room.predictions[player.id] || {}, calls = [];
-      const knownQuestions = [...(this.room.preMatch || []), ...(this.room.playerPreMatch?.[player.id] || []), ...(this.room.session?.rounds || []), this.room.session?.round].filter(Boolean);
+      const knownQuestions = [...(this.room.preMatch || []), ...(this.room.playerPreMatch?.[player.id] || []), ...(this.room.session?.rounds || []), this.room.session?.round, ...(this.room.callArchive || [])].filter(Boolean);
       const added = new Set();
       const addCall = (id, question, answer, status, matchTime) => {
         if (answer == null || added.has(String(id))) return;
@@ -983,6 +999,19 @@ export class MatchRoom {
     if (this.room.session.round?.status === "voting") { this.room.session.rounds ||= []; this.room.session.rounds.push(this.room.session.round); }
     const presentedAtClock = Number(this.room.session.clock) || 0, presentedAtClockDisplay = this.room.session.clockDisplay || null;
     const round = { id: "round-" + (this.room.session.nextRoundIndex || 0), scheduledCallAt, targetEventId: null, targetType: type, question: this.liveQuestion(type), choices: [{ key: "home", label: f.home?.name || "Home" }, { key: "away", label: f.away?.name || "Away" }], status: "voting", warmupEndsAt: null, voteEndsAt: null, result: null, openedAt: Date.now(), presentedAtClock, presentedAtClockDisplay, presentedMatchTime: formatMatchTime(presentedAtClock, presentedAtClockDisplay), baselineEventIds: this.room.timeline.map(e => e.id) };
+    this.room.callArchive ||= [];
+    if (!this.room.callArchive.some(call => String(call.id) === String(round.id))) {
+      this.room.callArchive.push({
+        id: round.id,
+        question: round.question,
+        type: round.targetType,
+        choices: round.choices.map(choice => ({ key: choice.key, label: choice.label })),
+        presentedAtClock: round.presentedAtClock,
+        presentedAtClockDisplay: round.presentedAtClockDisplay,
+        presentedMatchTime: round.presentedMatchTime,
+        openedAt: round.openedAt
+      });
+    }
     this.room.session.lastQuestionType = type; this.room.session.round = round; this.room.session.nextRoundIndex = (this.room.session.nextRoundIndex || 0) + 1; this.room.session.nextQuestionAt = scheduledCallAt + LIVE_CALL_INTERVAL_MS;
     this.room.events.unshift({ label: "Vote now", detail: round.question });
     // Continue polling ESPN every 15 seconds while this call is open.
