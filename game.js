@@ -1,4 +1,4 @@
-let ws, roomId, state, playerId, role, submittedRoundId = null, leaderboardOpen = false, finalLeaderboardDismissed = false, callsOpen = false, joinModalOpen = false, joinModalDismissed = false, preMatchDismissed = false, pendingJoinSent = false;
+let ws, roomId, state, playerId, role, submittedRoundId = null, leaderboardOpen = false, finalLeaderboardDismissed = false, callsOpen = false, joinModalOpen = false, joinModalDismissed = false, preMatchDismissed = false, pendingJoinSent = false, lastStateReceivedAt = 0;
 let lastStructuralRenderKey = "";
 const app = document.querySelector("#app"), query = new URLSearchParams(location.search);
 const directRoom = location.pathname.match(/^\/play\/([^/]+)$/i)?.[1];
@@ -20,7 +20,13 @@ const clock = (seconds, display) => {
 const send = message => { if (ws?.readyState === 1) ws.send(JSON.stringify(message)); };
 const formatCountdown = seconds => seconds <= 0 ? "SOON" : `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 setInterval(() => {
-  if (ws?.readyState === 1 && roomId) ws.send(JSON.stringify({ type: "sync" }));
+  if (!roomId) return;
+  if (ws?.readyState === 1) {
+    ws.send(JSON.stringify({ type: "sync" }));
+    if (lastStateReceivedAt && Date.now() - lastStateReceivedAt > 30000) {
+      ws.close(4000, "State delivery stalled");
+    }
+  }
 }, 15000);
 
 setInterval(() => {
@@ -204,7 +210,7 @@ function attemptPendingJoin() {
     send({ type: "join", name: pendingName, playerId: playerId || "", playerToken });
   }
 }
-function connect() { ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/room/${roomId}`); ws.onopen = () => { pendingJoinSent = false; attemptPendingJoin(); setTimeout(attemptPendingJoin, 250); }; ws.onmessage = event => { const message = JSON.parse(event.data); if (message.type === "identity") { playerId = message.playerId; localStorage.setItem(`calledItPlayer:${roomId}`, playerId); if (message.playerToken) localStorage.setItem(`calledItPlayerToken:${roomId}`, message.playerToken); attemptPendingJoin(); } if (message.state) { state = message.state; attemptPendingJoin(); render(); setTimeout(attemptPendingJoin, 0); } }; ws.onclose = () => { if (state?.session?.status === "complete") return; setTimeout(connect, 1500); }; }
+function connect() { ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "wss"}://${location.host}/api/room/${roomId}`); ws.onopen = () => { lastStateReceivedAt = Date.now(); pendingJoinSent = false; attemptPendingJoin(); setTimeout(attemptPendingJoin, 250); }; ws.onmessage = event => { const message = JSON.parse(event.data); if (message.type === "identity") { playerId = message.playerId; localStorage.setItem(`calledItPlayer:${roomId}`, playerId); if (message.playerToken) localStorage.setItem(`calledItPlayerToken:${roomId}`, message.playerToken); attemptPendingJoin(); } if (message.state) { lastStateReceivedAt = Date.now(); state = message.state; attemptPendingJoin(); render(); setTimeout(attemptPendingJoin, 0); } }; ws.onclose = () => { if (state?.session?.status === "complete") return; setTimeout(connect, 1500); }; }
 function preMatchCard(me) {
   const questions = state.playerPreMatch?.[playerId] || state.preMatch || [], answered = state.playerStatus?.[playerId] || [], current = questions.find(q => !answered.includes(q.id) && !q.settled);
   if (preMatchDismissed) return "";
