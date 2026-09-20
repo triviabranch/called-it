@@ -746,16 +746,9 @@ export class MatchRoom {
         const resolvedAt = round.status === "settled" && resolvingEvent?.minute != null ? `${resolvingEvent.minute}'` : null;
         addCall(round.id, round, answer, "Committed", resolvedAt || round.presentedMatchTime || formatMatchTime(round.presentedAtClock, round.presentedAtClockDisplay));
       }
-      // Preserve every legitimate stored prediction, including older rooms
-      // whose round metadata may no longer contain the original call. The
-      // internal home/away keys are not calls and must never be rendered.
-      for (const [id, answer] of Object.entries(predictions.pre || {})) {
-        addCall(id, { question: "Pre-match call", choices: [{ key: "home", label: this.room.fixture?.home?.name || "Home" }, { key: "away", label: this.room.fixture?.away?.name || "Away" }] }, answer, "Committed", "BEFORE KICK-OFF");
-      }
-      for (const [id, answer] of Object.entries(predictions)) {
-        if (id === "pre") continue;
-        addCall(id, { question: "Live call", choices: [{ key: "home", label: this.room.fixture?.home?.name || "Home" }, { key: "away", label: this.room.fixture?.away?.name || "Away" }] }, answer, "Committed", "IN PLAY");
-      }
+      // Only render predictions attached to a known pre-match question or
+      // live round. Internal/legacy keys without a question snapshot are not
+      // player-facing calls and must not appear on the scorecard.
       return { id: player.id, name: player.name, calls, points: player.points || 0, correct: player.correct || 0 };
     });
     const settledEventIds = [...(this.room.preMatch || []), ...rounds].map(item => item.result?.eventId).filter(Boolean).map(String);
