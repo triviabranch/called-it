@@ -373,10 +373,29 @@ function matchStatsModalMarkup() {
   const updated = stats?.updatedAt ? new Intl.DateTimeFormat("en-GB", { hour:"2-digit", minute:"2-digit", second:"2-digit", hour12:false }).format(new Date(stats.updatedAt)) : "waiting";
   return `<div class="match-stats-backdrop" data-match-stats-close><section class="match-stats-modal" role="dialog" aria-modal="true" aria-label="Match stats"><div class="section-head"><div><div class="phase">LIVE MATCH DATA</div><h2>Match stats</h2></div><button class="modal-close" data-match-stats-close aria-label="Close match stats">×</button></div><div class="stats-team-head"><b>${esc(fixture.home?.name || home?.name || "Home")}</b><span>ESPN</span><b>${esc(fixture.away?.name || away?.name || "Away")}</b></div>${branches ? `<div class="stats-tree">${branches}</div>` : '<p class="muted">Match stats are not available yet.</p>'}<p class="stats-updated">Updated ${esc(updated)}</p></section></div>`;
 }
+let matchStatsEscapeHandler = null;
+function closeMatchStatsModal() {
+  matchStatsOpen = false;
+  document.querySelector(".match-stats-backdrop")?.remove();
+  if (matchStatsEscapeHandler) document.removeEventListener("keydown", matchStatsEscapeHandler);
+  matchStatsEscapeHandler = null;
+}
+function mountMatchStatsModal() {
+  matchStatsOpen = true;
+  if (document.querySelector(".match-stats-backdrop")) return;
+  document.body.insertAdjacentHTML("beforeend", matchStatsModalMarkup());
+  const backdrop = document.querySelector(".match-stats-backdrop");
+  if (!backdrop) return;
+  backdrop.addEventListener("click", event => {
+    if (event.target === backdrop || event.target.classList.contains("modal-close")) closeMatchStatsModal();
+  });
+  matchStatsEscapeHandler = event => { if (event.key === "Escape") closeMatchStatsModal(); };
+  document.addEventListener("keydown", matchStatsEscapeHandler);
+}
 
   const callsModal = committedCallsModal();
   const playerStats = me ? `<div class="player-stats player-score-stats calls-trigger" role="button" tabindex="0" data-calls-open aria-label="View your score and committed calls"><div class="stat-tile"><b>${me.calls ?? me.rounds ?? 0}</b><small>CALLS MADE</small></div><div class="stat-tile"><b>${me.correct || 0}</b><small>CORRECT</small></div><div class="stat-tile"><b>${me.points || 0}</b><small>POINTS</small></div></div>` : '';
-  app.innerHTML = `<header class="brand"><a href="/" aria-label="Called It home"><img src="assets/called-it-wordmark.png" alt="Called It"></a><div class="room-actions"><button class="header-leaderboard leaderboard-trigger" data-leaderboard-open>Leaderboard <span>↗</span></button></div></header><div class="match-header ${isHalfTime ? "at-half-time" : ""}"><div class="scoreboard-live-marker"><span>${esc(matchStatus)}</span><span class="scoreboard-live-clock" data-match-clock>${clock(state.session?.clock, state.session?.clockDisplay)}</span></div><button class="match-stats-trigger" data-match-stats-open>Match stats <span>↗</span></button><h1 class="scoreboard-teams"><span><b>${esc(f.home?.name)}</b><strong>${f.home?.score ?? "–"}</strong><small class="scoreboard-goal-list">${goalLines(f.home?.name)}</small></span><span><b>${esc(f.away?.name)}</b><strong>${f.away?.score ?? "–"}</strong><small class="scoreboard-goal-list">${goalLines(f.away?.name)}</small></span></h1></div>${playerStats}${callsModal}<section class="card broadcast-feed" aria-live="polite"><div class="section-head"><h2>Match feed</h2>${nextCallLabel ? `<span class="feed-next-call"><span data-next-call-countdown data-next-call-at="${state.session.nextQuestionAt}">NEXT CALL IN <b>${nextCallLabel}</b></span></span>` : ""}</div><div class="broadcast-feed-list">${feed}</div></section><footer class="called-it-footer"><a href="/" aria-label="Called It home"><img src="assets/called-it-wordmark.png" alt="Called It"></a><span>Live matchday play-along</span></footer>${simulationPanel()}${!me ? `${joinCta}<p class="muted join-count">${state.players?.length || 0} supporter(s) are in the room.</p>` : ""}${playerJoinModal}${me && incomplete && r?.status !== "voting" ? preMatchCard(me) : ""}${me ? call : ""}${(leaderboardOpen || (state.session?.status === "complete" && !finalLeaderboardDismissed)) ? leaderboard : ""}${matchStatsModalMarkup()}`;
+  app.innerHTML = `<header class="brand"><a href="/" aria-label="Called It home"><img src="assets/called-it-wordmark.png" alt="Called It"></a><div class="room-actions"><button class="header-leaderboard leaderboard-trigger" data-leaderboard-open>Leaderboard <span>↗</span></button></div></header><div class="match-header ${isHalfTime ? "at-half-time" : ""}"><div class="scoreboard-live-marker"><span>${esc(matchStatus)}</span><span class="scoreboard-live-clock" data-match-clock>${clock(state.session?.clock, state.session?.clockDisplay)}</span></div><button class="match-stats-trigger" data-match-stats-open>Match stats <span>↗</span></button><h1 class="scoreboard-teams"><span><b>${esc(f.home?.name)}</b><strong>${f.home?.score ?? "–"}</strong><small class="scoreboard-goal-list">${goalLines(f.home?.name)}</small></span><span><b>${esc(f.away?.name)}</b><strong>${f.away?.score ?? "–"}</strong><small class="scoreboard-goal-list">${goalLines(f.away?.name)}</small></span></h1></div>${playerStats}${callsModal}<section class="card broadcast-feed" aria-live="polite"><div class="section-head"><h2>Match feed</h2>${nextCallLabel ? `<span class="feed-next-call"><span data-next-call-countdown data-next-call-at="${state.session.nextQuestionAt}">NEXT CALL IN <b>${nextCallLabel}</b></span></span>` : ""}</div><div class="broadcast-feed-list">${feed}</div></section><footer class="called-it-footer"><a href="/" aria-label="Called It home"><img src="assets/called-it-wordmark.png" alt="Called It"></a><span>Live matchday play-along</span></footer>${simulationPanel()}${!me ? `${joinCta}<p class="muted join-count">${state.players?.length || 0} supporter(s) are in the room.</p>` : ""}${playerJoinModal}${me && incomplete && r?.status !== "voting" ? preMatchCard(me) : ""}${me ? call : ""}${(leaderboardOpen || (state.session?.status === "complete" && !finalLeaderboardDismissed)) ? leaderboard : ""}`;
   const newFeed = document.querySelector(".broadcast-feed-list"); if (newFeed) { newFeed.scrollTop = feedWasNearTop ? 0 : feedScrollTop; }
   document.querySelector("[data-player-join-open]")?.addEventListener("click", () => { joinModalOpen = true; joinModalDismissed = false; render(); });
   document.querySelector("[data-player-join-close]")?.addEventListener("click", () => { joinModalOpen = false; joinModalDismissed = true; render(); });
@@ -417,9 +436,9 @@ function matchStatsModalMarkup() {
   });
   document.querySelectorAll("[data-leaderboard-open]").forEach(button => button.onclick = () => { leaderboardOpen = true; render(); });
   document.querySelectorAll("[data-leaderboard-close]").forEach(button => button.onclick = event => { if (event.target === button || button.classList.contains("modal-close")) { leaderboardOpen = false; if (state.session?.status === "complete") finalLeaderboardDismissed = true; render(); } });
-  document.querySelectorAll("[data-match-stats-open]").forEach(button => button.onclick = () => { matchStatsOpen = true; render(); });
-  document.querySelectorAll("[data-match-stats-close]").forEach(element => element.onclick = event => { if (event.target === element || event.target.classList.contains("modal-close")) { matchStatsOpen = false; render(); } });
-  if (leaderboardOpen || matchStatsOpen || callsOpen) document.addEventListener("keydown", event => { if (event.key === "Escape") { leaderboardOpen = false; matchStatsOpen = false; callsOpen = false; render(); } }, { once:true });
+  document.querySelectorAll("[data-match-stats-open]").forEach(button => button.onclick = mountMatchStatsModal);
+  if (matchStatsOpen) mountMatchStatsModal();
+  if (leaderboardOpen || callsOpen) document.addEventListener("keydown", event => { if (event.key === "Escape") { leaderboardOpen = false; callsOpen = false; render(); } }, { once:true });
 
 }
 roomId = query.get("room"); role = query.get("role") || "player";
