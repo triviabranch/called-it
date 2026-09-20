@@ -1098,7 +1098,7 @@ export class MatchRoom {
     const correct = target ? this.keyForQuestion({ type: "first-goal-team" }, target) : null;
     round.result = { correct, event: target?.text || `No ${round.targetType} recorded during the call`, eventId: target?.id || null }; round.status = "settled";
     for (const p of this.room.players) { const answer = this.room.predictions[p.id]?.[round.id]; if (answer) p.calls = (p.calls || 0) + 1; if (correct && answer === correct) { p.points = (p.points || 0) + 100; p.correct = (p.correct || 0) + 1; } if (answer) p.rounds = (p.rounds || 0) + 1; }
-    this.rebuildLeaderboard(); this.room.events.unshift({ label: "Prediction settled", detail: round.result.event }); await this.save(); this.broadcast(); this.schedule(Math.min(LIVE_PROVIDER_POLL_MS, Math.max(250, (this.room.session.nextQuestionAt || Date.now() + LIVE_PROVIDER_POLL_MS) - Date.now())));
+    this.rebuildLeaderboard(); this.room.events.unshift({ label: "Prediction settled", detail: round.result.event }); await this.save(); this.broadcast(); this.schedule(Math.min(this.providerPollDelayMs(), Math.max(250, (this.room.session.nextQuestionAt || Date.now() + this.providerPollDelayMs()) - Date.now())));
   }
   async webSocketMessage(ws, raw) {
     let m; try { m = JSON.parse(raw); } catch { return; } if (!this.room) await this.load(); this.room.lastActivity = Date.now();
