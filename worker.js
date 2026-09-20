@@ -955,7 +955,9 @@ export class MatchRoom {
     const existing = rounds.find(round => Number(round.scheduledCallAt) === scheduledCallAt || (Number(round.openedAt) > 0 && Math.abs(Number(round.openedAt) - scheduledCallAt) <= 120000));
     if (existing) {
       this.room.session.nextQuestionAt = scheduledCallAt + LIVE_CALL_INTERVAL_MS;
-      await this.save(); this.broadcast(); this.schedule(10000);
+      // Keep the single room-level ESPN poll alive while a call is open.
+      // The next call cadence is independent of provider polling.
+      await this.save(); this.broadcast(); this.schedule(LIVE_PROVIDER_POLL_MS);
       return;
     }
     const type = this.nextLiveType(), f = this.room.fixture || {};
@@ -963,7 +965,11 @@ export class MatchRoom {
     const presentedAtClock = Number(this.room.session.clock) || 0, presentedAtClockDisplay = this.room.session.clockDisplay || null;
     const round = { id: "round-" + (this.room.session.nextRoundIndex || 0), scheduledCallAt, targetEventId: null, targetType: type, question: this.liveQuestion(type), choices: [{ key: "home", label: f.home?.name || "Home" }, { key: "away", label: f.away?.name || "Away" }], status: "voting", warmupEndsAt: null, voteEndsAt: null, result: null, openedAt: Date.now(), presentedAtClock, presentedAtClockDisplay, presentedMatchTime: formatMatchTime(presentedAtClock, presentedAtClockDisplay), baselineEventIds: this.room.timeline.map(e => e.id) };
     this.room.session.lastQuestionType = type; this.room.session.round = round; this.room.session.nextRoundIndex = (this.room.session.nextRoundIndex || 0) + 1; this.room.session.nextQuestionAt = scheduledCallAt + LIVE_CALL_INTERVAL_MS;
-    this.room.events.unshift({ label: "Vote now", detail: round.question }); await this.save(); this.broadcast(); this.schedule(Math.min(LIVE_PROVIDER_POLL_MS, Math.max(250, (this.room.session.nextQuestionAt || Date.now() + LIVE_PROVIDER_POLL_MS) - Date.now())));
+    this.room.events.unshift({ label: "Vote now", detail: round.question });
+    // Continue polling ESPN every 15 seconds while this call is open.
+    // Call creation remains anchored to nextQuestionAt and is handled by the
+    // next alarm; this remains one alarm per active room, not per player.
+    await this.save(); this.broadcast(); this.schedule(LIVE_PROVIDER_POLL_MS);
   }
   targetForQuestion(q) { return this.room.timeline.find(e => (((q.type === "first-goal-team" || q.type === "next-goal-team" || q.type === "first-goalscorer") && e.type === "goal") || ((q.type === "first-goal-kick-time" || q.type === "next-goal-kick-time") && e.type === "goal-kick") || ((q.type === "first-foul-team" || q.type === "next-foul-team") && e.type === "foul")) && !(q.baselineEventIds || []).includes(String(e.id)) && (q.afterOffset == null || e.offset > q.afterOffset)); }
   keyForQuestion(q, target) {
