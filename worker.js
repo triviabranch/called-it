@@ -757,7 +757,14 @@ export class MatchRoom {
       };
       for (const record of (player.callRecords || [])) {
         const question = knownQuestions.find(item => String(item.id) === String(record.id));
-        addCall(record.id, record.question ? { question: record.question, choices: record.choices || [] } : question || { question: "Question unavailable" }, record.answer, "Committed", record.matchTime || "IN PLAY");
+        // Keep the immutable call snapshot for provenance, but use the
+        // authoritative live question when it has since been settled. The
+        // previous synthetic snapshot masked result/status and made every
+        // call appear permanently "Committed".
+        const callQuestion = question
+          ? { ...question, question: question.question || record.question, choices: question.choices?.length ? question.choices : (record.choices || []) }
+          : { question: record.question || "Question unavailable", choices: record.choices || [] };
+        addCall(record.id, callQuestion, record.answer, "Committed", record.matchTime || "IN PLAY");
       }
       for (const question of [...(this.room.preMatch || []), ...(this.room.playerPreMatch?.[player.id] || [])]) {
         const answer = predictions.pre?.[question.id];
