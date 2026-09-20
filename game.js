@@ -1,4 +1,4 @@
-let ws, roomId, state, playerId, role, submittedRoundId = null, leaderboardOpen = false, finalLeaderboardDismissed = false, callsOpen = false, joinModalOpen = false, joinModalDismissed = false, preMatchDismissed = false, pendingJoinSent = false, lastStateReceivedAt = 0;
+let ws, roomId, state, playerId, role, submittedRoundId = null, leaderboardOpen = false, matchStatsOpen = false, finalLeaderboardDismissed = false, callsOpen = false, joinModalOpen = false, joinModalDismissed = false, preMatchDismissed = false, pendingJoinSent = false, lastStateReceivedAt = 0;
 let lastStructuralRenderKey = "";
 const app = document.querySelector("#app"), query = new URLSearchParams(location.search);
 const directRoom = location.pathname.match(/^\/play\/([^/]+)$/i)?.[1];
@@ -337,9 +337,46 @@ function committedCallsModal() {
   return `<div class="calls-modal-backdrop" data-calls-close><section class="calls-modal" role="dialog" aria-modal="true" aria-label="${esc(callsTitle)}"><div class="section-head"><div class="calls-modal-heading"><img src="assets/called-it-wordmark.png" alt="Called It"></div><button class="modal-close" data-calls-close aria-label="Close calls">×</button></div>${matchScoreboard}<h2 class="calls-modal-title">${esc(callsTitle)}</h2>${scoreHero}${playerHtml || "<p class=\"muted\">No calls committed yet.</p>"}<div class="calls-modal-footer"><button type="button" class="share-result share-icon" data-share-result data-share-kind="calls" aria-label="Share calls" title="Share calls"><svg class="share-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 16V3m0 0L7 8m5-5 5 5M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg></button></div></section></div>`;
 }
 
+function matchStatsModalMarkup() {
+  if (!matchStatsOpen) return "";
+  const stats = state.matchStats;
+  const fixture = state.fixture || {};
+  const normalise = value => String(value || "").toLowerCase().replace(/\b(fc|afc|city|town|united)\b/g, "").replace(/[^a-z0-9]/g, "");
+  const teams = stats?.teams || [];
+  const findTeam = name => teams.find(team => {
+    const a = normalise(team.name), b = normalise(name);
+    return a && b && (a.includes(b) || b.includes(a));
+  });
+  const home = findTeam(fixture.home?.name) || teams[0];
+  const away = findTeam(fixture.away?.name) || teams[1];
+  const rows = [
+    ["possessionPct", "Possession", true],
+    ["totalShots", "Shots", false],
+    ["shotsOnTarget", "On target", false],
+    ["wonCorners", "Corners", false],
+    ["foulsCommitted", "Fouls", false],
+    ["offsides", "Offsides", false],
+    ["saves", "Saves", false],
+    ["yellowCards", "Yellow cards", false],
+    ["redCards", "Red cards", false]
+  ];
+  const value = (team, key) => team?.stats?.[key]?.value ?? "";
+  const display = (raw, percent) => raw === "" ? "—" : `${raw}${percent ? "%" : ""}`;
+  const available = rows.filter(([key]) => value(home, key) !== "" || value(away, key) !== "");
+  const branches = available.map(([key, label, percent]) => {
+    const left = Number.parseFloat(value(home, key)), right = Number.parseFloat(value(away, key));
+    const maximum = percent ? 100 : Math.max(1, Number.isFinite(left) ? left : 0, Number.isFinite(right) ? right : 0);
+    const leftWidth = Number.isFinite(left) ? Math.max(0, Math.min(100, left / maximum * 100)) : 0;
+    const rightWidth = Number.isFinite(right) ? Math.max(0, Math.min(100, right / maximum * 100)) : 0;
+    return `<div class="stats-branch"><div class="stats-side stats-home"><b>${display(value(home, key), percent)}</b><span class="stats-bar"><i style="width:${leftWidth}%"></i></span></div><strong class="stats-label">${label}</strong><div class="stats-side stats-away"><span class="stats-bar"><i style="width:${rightWidth}%"></i></span><b>${display(value(away, key), percent)}</b></div></div>`;
+  }).join("");
+  const updated = stats?.updatedAt ? new Intl.DateTimeFormat("en-GB", { hour:"2-digit", minute:"2-digit", second:"2-digit", hour12:false }).format(new Date(stats.updatedAt)) : "waiting";
+  return `<div class="match-stats-backdrop" data-match-stats-close><section class="match-stats-modal" role="dialog" aria-modal="true" aria-label="Match stats"><div class="section-head"><div><div class="phase">LIVE MATCH DATA</div><h2>Match stats</h2></div><button class="modal-close" data-match-stats-close aria-label="Close match stats">×</button></div><div class="stats-team-head"><b>${esc(fixture.home?.name || home?.name || "Home")}</b><span>ESPN</span><b>${esc(fixture.away?.name || away?.name || "Away")}</b></div>${branches ? `<div class="stats-tree">${branches}</div>` : '<p class="muted">Match stats are not available yet.</p>'}<p class="stats-updated">Updated ${esc(updated)}</p></section></div>`;
+}
+
   const callsModal = committedCallsModal();
   const playerStats = me ? `<div class="player-stats player-score-stats calls-trigger" role="button" tabindex="0" data-calls-open aria-label="View your score and committed calls"><div class="stat-tile"><b>${me.calls ?? me.rounds ?? 0}</b><small>CALLS MADE</small></div><div class="stat-tile"><b>${me.correct || 0}</b><small>CORRECT</small></div><div class="stat-tile"><b>${me.points || 0}</b><small>POINTS</small></div></div>` : '';
-  app.innerHTML = `<header class="brand"><a href="/" aria-label="Called It home"><img src="assets/called-it-wordmark.png" alt="Called It"></a><span class="room">${esc(state.session?.status || "LIVE")}</span></header><div class="match-header ${isHalfTime ? "at-half-time" : ""}"><div class="scoreboard-live-marker"><span>${esc(matchStatus)}</span><span class="scoreboard-live-clock" data-match-clock>${clock(state.session?.clock, state.session?.clockDisplay)}</span></div><button class="match-header-leaderboard leaderboard-trigger" data-leaderboard-open>Leaderboard <span>↗</span></button><h1 class="scoreboard-teams"><span><b>${esc(f.home?.name)}</b><strong>${f.home?.score ?? "–"}</strong><small class="scoreboard-goal-list">${goalLines(f.home?.name)}</small></span><span><b>${esc(f.away?.name)}</b><strong>${f.away?.score ?? "–"}</strong><small class="scoreboard-goal-list">${goalLines(f.away?.name)}</small></span></h1></div>${playerStats}${callsModal}<section class="card broadcast-feed" aria-live="polite"><div class="section-head"><h2>Match feed</h2>${nextCallLabel ? `<span class="feed-next-call"><span data-next-call-countdown data-next-call-at="${state.session.nextQuestionAt}">NEXT CALL IN <b>${nextCallLabel}</b></span></span>` : ""}</div><div class="broadcast-feed-list">${feed}</div></section><footer class="called-it-footer"><a href="/" aria-label="Called It home"><img src="assets/called-it-wordmark.png" alt="Called It"></a><span>Live matchday play-along</span></footer>${simulationPanel()}${!me ? `${joinCta}<p class="muted join-count">${state.players?.length || 0} supporter(s) are in the room.</p>` : ""}${playerJoinModal}${me && incomplete && r?.status !== "voting" ? preMatchCard(me) : ""}${me ? call : ""}${(leaderboardOpen || (state.session?.status === "complete" && !finalLeaderboardDismissed)) ? leaderboard : ""}`;
+  app.innerHTML = `<header class="brand"><a href="/" aria-label="Called It home"><img src="assets/called-it-wordmark.png" alt="Called It"></a><div class="room-actions"><button class="header-leaderboard leaderboard-trigger" data-leaderboard-open>Leaderboard <span>↗</span></button></div></header><div class="match-header ${isHalfTime ? "at-half-time" : ""}"><div class="scoreboard-live-marker"><span>${esc(matchStatus)}</span><span class="scoreboard-live-clock" data-match-clock>${clock(state.session?.clock, state.session?.clockDisplay)}</span></div><button class="match-stats-trigger" data-match-stats-open>Match stats <span>↗</span></button><h1 class="scoreboard-teams"><span><b>${esc(f.home?.name)}</b><strong>${f.home?.score ?? "–"}</strong><small class="scoreboard-goal-list">${goalLines(f.home?.name)}</small></span><span><b>${esc(f.away?.name)}</b><strong>${f.away?.score ?? "–"}</strong><small class="scoreboard-goal-list">${goalLines(f.away?.name)}</small></span></h1></div>${playerStats}${callsModal}<section class="card broadcast-feed" aria-live="polite"><div class="section-head"><h2>Match feed</h2>${nextCallLabel ? `<span class="feed-next-call"><span data-next-call-countdown data-next-call-at="${state.session.nextQuestionAt}">NEXT CALL IN <b>${nextCallLabel}</b></span></span>` : ""}</div><div class="broadcast-feed-list">${feed}</div></section><footer class="called-it-footer"><a href="/" aria-label="Called It home"><img src="assets/called-it-wordmark.png" alt="Called It"></a><span>Live matchday play-along</span></footer>${simulationPanel()}${!me ? `${joinCta}<p class="muted join-count">${state.players?.length || 0} supporter(s) are in the room.</p>` : ""}${playerJoinModal}${me && incomplete && r?.status !== "voting" ? preMatchCard(me) : ""}${me ? call : ""}${(leaderboardOpen || (state.session?.status === "complete" && !finalLeaderboardDismissed)) ? leaderboard : ""}${matchStatsModalMarkup()}`;
   const newFeed = document.querySelector(".broadcast-feed-list"); if (newFeed) { newFeed.scrollTop = feedWasNearTop ? 0 : feedScrollTop; }
   document.querySelector("[data-player-join-open]")?.addEventListener("click", () => { joinModalOpen = true; joinModalDismissed = false; render(); });
   document.querySelector("[data-player-join-close]")?.addEventListener("click", () => { joinModalOpen = false; joinModalDismissed = true; render(); });
@@ -380,7 +417,9 @@ function committedCallsModal() {
   });
   document.querySelectorAll("[data-leaderboard-open]").forEach(button => button.onclick = () => { leaderboardOpen = true; render(); });
   document.querySelectorAll("[data-leaderboard-close]").forEach(button => button.onclick = event => { if (event.target === button || button.classList.contains("modal-close")) { leaderboardOpen = false; if (state.session?.status === "complete") finalLeaderboardDismissed = true; render(); } });
-  if (leaderboardOpen || callsOpen) document.addEventListener("keydown", event => { if (event.key === "Escape") { leaderboardOpen = false; callsOpen = false; render(); } }, { once:true });
+  document.querySelectorAll("[data-match-stats-open]").forEach(button => button.onclick = () => { matchStatsOpen = true; render(); });
+  document.querySelectorAll("[data-match-stats-close]").forEach(element => element.onclick = event => { if (event.target === element || event.target.classList.contains("modal-close")) { matchStatsOpen = false; render(); } });
+  if (leaderboardOpen || matchStatsOpen || callsOpen) document.addEventListener("keydown", event => { if (event.key === "Escape") { leaderboardOpen = false; matchStatsOpen = false; callsOpen = false; render(); } }, { once:true });
 
 }
 roomId = query.get("room"); role = query.get("role") || "player";
