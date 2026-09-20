@@ -91,6 +91,13 @@ function broadcastsForFixture(fixture, config, region) {
   if (region === "gb" && config.league === "eng.league_cup") {
     return [{ name: "Sky Sports+", market: "uk" }];
   }
+  // ESPN's NRL Core feed does not expose broadcaster rows, even for live
+  // matches that are carried in the selected market. Keep NRL discoverable
+  // under Called It's televised-fixture rule while retaining the provenance
+  // in the label rather than pretending ESPN supplied a network name.
+  if (config.sport === "rugby-league" && config.league === "3") {
+    return fixture.broadcasts?.length ? fixture.broadcasts : [{ name: "NRL coverage", market: region }];
+  }
   if (fixture.broadcasts?.length) return fixture.broadcasts;
   return REGION_BROADCAST_FALLBACKS[region]?.[config.league] || [];
 }
@@ -172,6 +179,11 @@ function eventClock(item) {
 }
 function eventType(item) {
   const kind = String(item?.type?.type || item?.type?.name || "").toLowerCase();
+  // NRL uses rugby scoring terminology rather than football's goal events.
+  // Keep tries and other scoring plays in the existing score-resolution lane
+  // while retaining conversions as a visible feed event.
+  if (/\btry\b|penalty.?goal|drop.?goal|field.?goal/.test(kind)) return "goal";
+  if (/\bconversion\b/.test(kind)) return "conversion";
   if (/goal.?kick/.test(kind)) return "goal-kick";
   if (item?.scoringPlay || /(^|[- ])(goal|score)(?![- ]?kick)/.test(kind)) return "goal";
   if (item?.redCard || /red.?card|sent.?off/.test(kind)) return "card";
@@ -184,6 +196,8 @@ function eventType(item) {
   if (/var|video/.test(kind)) return "var";
   if (/kickoff|kick.?off|halftime|half.?time|full.?time|match.?end/.test(kind)) return "phase";
   const text = [item?.type?.text, item?.type?.name, item?.text, item?.shortText, item?.description, item?.detail].filter(Boolean).join(" ").toLowerCase();
+  if (/\btry\b|penalty goal|drop goal|field goal/.test(text)) return "goal";
+  if (/\bconversion\b/.test(text)) return "conversion";
   if (/goal kick/.test(text)) return "goal-kick";
   if (/(scores|scored|penalty kick goal|own goal|goal!)/.test(text) && !/goal kick/.test(text)) return "goal";
   if (/corner/.test(text)) return "corner";
@@ -314,6 +328,8 @@ function inUkSaturdayClosedPeriod(value) {
 
 async function scoreboardEvents(sport, league, start, end, region = "gb") {
   const market = regionInfo(region).espn;
+  const isNrl = sport === "rugby-league" && String(league) === "3";
+  if (isNrl) return coreNrlEvents(sport, league, start, end, market);
   try {
     const ranged = await readJson(`${siteBase(sport)}/${leaguePath(league)}/scoreboard?dates=${start}-${end}&region=${market}&lang=en`);
     if (Array.isArray(ranged.events) && ranged.events.length) return ranged.events;
@@ -325,6 +341,47 @@ async function scoreboardEvents(sport, league, start, end, region = "gb") {
     const results = await Promise.all(dates.map(date => readJson(`${siteBase(sport)}/${leaguePath(league)}/scoreboard?dates=${date}&region=${market}&lang=en`)));
     return results.flatMap(result => result.events || []);
   }
+}
+
+async function readCoreReference(reference) {
+  if (!reference) return null;
+  return readJson(String(reference).replace(/^http:/, "https:"));
+}
+
+async function coreNrlEvents(sport, league, start, end, market) {
+  // ESPN does not implement the normal site scoreboard endpoint for NRL.
+  // Its Core API does expose the current programme and the complete live
+  // event records, including status, score and team references.
+  const programme = await readCoreReference(`${coreBase(sport, league)}/events?limit=100&lang=en&region=${market}`);
+  const refs = (programme?.items || []).map(item => item?.["$ref"] || item?.ref).filter(Boolean);
+  const events = await Promise.all(refs.map(readCoreReference));
+  const from = Number(start), to = Number(end);
+  return (await Promise.all(events.filter(Boolean).map(async event => {
+    const competition = event.competitions?.[0] || {};
+    const competitors = await Promise.all((competition.competitors || []).map(async competitor => {
+      const team = competitor.team?.["$ref"] ? await readCoreReference(competitor.team["$ref"]) : competitor.team || {};
+      let score = competitor.score;
+      if (score && typeof score === "object" && score["$ref"]) {
+        const scoreData = await readCoreReference(score["$ref"]);
+        score = scoreData?.displayValue ?? scoreData?.value ?? scoreData?.score ?? null;
+      }
+      return { ...competitor, team, score };
+    }));
+    const status = competition.status?.["$ref"] ? await readCoreReference(competition.status["$ref"]) : competition.status || {};
+    const broadcasts = competition.broadcasts?.["$ref"] ? await readCoreReference(competition.broadcasts["$ref"]) : competition.broadcasts;
+    const broadcastRows = Array.isArray(broadcasts?.items) ? broadcasts.items : Array.isArray(broadcasts) ? broadcasts : [];
+    return {
+      id: String(event.id),
+      name: event.name,
+      date: event.date,
+      status: { type: status?.type || status || {} },
+      broadcasts: broadcastRows,
+      competitions: [{ ...competition, competitors, status: { type: status?.type || status || {} }, broadcasts: broadcastRows }]
+    };
+  }))).filter(event => {
+    const key = String(event.date || "").slice(0, 10).replaceAll("-", "");
+    return !key || (key >= String(from) && key <= String(to));
+  });
 }
 async function pullFixtures(broadcastRules = DEFAULT_BROADCAST_RULES, enabledCompetitions = DEFAULT_ENABLED_COMPETITIONS, region = "gb") {
   const now = Date.now();
@@ -859,7 +916,9 @@ export class MatchRoom {
     return { seconds: Math.max(this.room.session.clock || 0, timelineSeconds), display: null };
   }
   nextLiveType() {
-    const types = ["corner", "foul", "shot", "goal-kick", "substitution", "goal", "card"];
+    const types = this.room.provider?.sport === "rugby-league"
+      ? ["goal", "substitution"]
+      : ["corner", "foul", "shot", "goal-kick", "substitution", "goal", "card"];
     return types[(Number(this.room.session.nextRoundIndex) || 0) % types.length];
   }
   liveQuestion(type) {
