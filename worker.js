@@ -232,6 +232,15 @@ function normaliseCorePlay(item, index) { return normaliseEvent({ ...item, text:
 function normaliseCommentary(item, index) { const play = item?.play || item; return normaliseEvent({ ...play, clock: play.clock || item.time, text: item.text || play.text || play.shortText }, index, "commentary"); }
 function meaningful(item) { return eventType(item) !== "other"; }
 
+function normaliseMatchStats(data) {
+  const allowed = new Set(["possessionPct", "totalShots", "shotsOnTarget", "wonCorners", "foulsCommitted", "offsides", "yellowCards", "redCards", "saves"]);
+  const teams = (data?.boxscore?.teams || []).map(row => ({
+    name: row?.team?.displayName || row?.team?.shortDisplayName || row?.team?.name || "Team",
+    stats: Object.fromEntries((row?.statistics || []).filter(stat => allowed.has(stat?.name)).map(stat => [stat.name, { label: stat.label || stat.name, value: String(stat.displayValue ?? stat.value ?? "") }]))
+  }));
+  return teams.length === 2 ? { updatedAt: Date.now(), teams } : null;
+}
+
 function normaliseTeamName(value) {
   return String(value || "").toLowerCase().replace(/\b(fc|afc|city|town|united)\b/g, "").replace(/[^a-z0-9]/g, "");
 }
@@ -709,7 +718,7 @@ export class MatchRoom {
   async load() {
     this.room = await this.state.storage.get("room") || {
       createdAt: Date.now(), lastActivity: Date.now(), fixture: null, provider: { name: "ESPN", league: "eng.1", eventId: null, error: null },
-      timeline: [], preMatch: [], callArchive: [], mode: "live", speed: 1, session: { status: "lobby", startedAt: null, round: null, clock: 0, clockBase: 0, speed: 1 }, players: [], predictions: {}, leaderboard: [],
+      timeline: [], preMatch: [], callArchive: [], matchStats: null, mode: "live", speed: 1, session: { status: "lobby", startedAt: null, round: null, clock: 0, clockBase: 0, speed: 1 }, players: [], predictions: {}, leaderboard: [],
       events: [{ label: "Fixture room opened", detail: "Live data from ESPN" }], lastProviderEventIds: [], lastLivePollAt: 0
     };
     this.room.callArchive ||= [];
@@ -855,6 +864,7 @@ export class MatchRoom {
       ]);
       if (summary.status !== "fulfilled") throw summary.reason;
       const data = summary.value;
+      this.room.matchStats = normaliseMatchStats(data) || this.room.matchStats || null;
       const competition = data.header?.competitions?.[0] || data.competitions?.[0] || {};
       const nextFixture = fixture({ id, name: competition.shortName || competition.name, date: competition.date || this.room.fixture.date, competitions: [{ ...competition, competitors: competition.competitors || [] }], status: competition.status });
       this.room.fixture = { ...this.room.fixture, ...nextFixture, home: { ...this.room.fixture.home, ...nextFixture.home }, away: { ...this.room.fixture.away, ...nextFixture.away } };
