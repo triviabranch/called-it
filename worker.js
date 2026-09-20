@@ -864,8 +864,27 @@ export class MatchRoom {
       // Core polling can return only the newest page while ESPN summary still
       // contains earlier scoring plays. Merge both so the scoreboard cannot
       // know the score without also retaining the scorer event.
+      const enrichEvent = event => {
+        if (event.type !== "goal") return event;
+        const text = String(event.text || "");
+        if (!event.athletes?.length) {
+          const scorer = text.match(/\.\s*([^.(]+?)\s*\(([^)]+)\)/);
+          if (scorer?.[1]) event.athletes = [scorer[1].trim()];
+        }
+        if (!event.team) {
+          const scorerTeam = text.match(/\(([^)]+)\)/)?.[1] || "";
+          const fixtureTeams = [this.room.fixture?.home?.name, this.room.fixture?.away?.name].filter(Boolean);
+          const matchedTeam = fixtureTeams.find(team => {
+            const left = normaliseTeamName(team), right = normaliseTeamName(scorerTeam);
+            return left && right && (left.includes(right) || right.includes(left));
+          });
+          if (matchedTeam) event.team = matchedTeam;
+        }
+        return event;
+      };
       const summaryItems = [...(data.plays || []), ...(data.scoringPlays || []), ...(data.keyEvents || [])];
       const incoming = [...coreItems.map((item, index) => normaliseEvent(item, index, source)), ...summaryItems.map((item, index) => normaliseEvent(item, index, "summary-live"))]
+        .map(enrichEvent)
         .filter(event => event.offset != null && event.type !== "other")
         .filter((event, index, events) => events.findIndex(candidate => `${candidate.type}|${candidate.offset}|${candidate.text}` === `${event.type}|${event.offset}|${event.text}`) === index);
       const byId = new Map(this.room.timeline.map(event => [String(event.id), event]));
@@ -996,7 +1015,12 @@ export class MatchRoom {
       return;
     }
     const type = this.nextLiveType(), f = this.room.fixture || {};
-    if (this.room.session.round?.status === "voting") { this.room.session.rounds ||= []; this.room.session.rounds.push(this.room.session.round); }
+    if (this.room.session.round) {
+      this.room.session.rounds ||= [];
+      if (!this.room.session.rounds.some(existingRound => String(existingRound.id) === String(this.room.session.round.id))) {
+        this.room.session.rounds.push(this.room.session.round);
+      }
+    }
     const presentedAtClock = Number(this.room.session.clock) || 0, presentedAtClockDisplay = this.room.session.clockDisplay || null;
     const round = { id: "round-" + (this.room.session.nextRoundIndex || 0), scheduledCallAt, targetEventId: null, targetType: type, question: this.liveQuestion(type), choices: [{ key: "home", label: f.home?.name || "Home" }, { key: "away", label: f.away?.name || "Away" }], status: "voting", warmupEndsAt: null, voteEndsAt: null, result: null, openedAt: Date.now(), presentedAtClock, presentedAtClockDisplay, presentedMatchTime: formatMatchTime(presentedAtClock, presentedAtClockDisplay), baselineEventIds: this.room.timeline.map(e => e.id) };
     this.room.callArchive ||= [];
@@ -1095,12 +1119,26 @@ export class MatchRoom {
       this.settlePreMatch(s.clock);
       if (String(this.room.fixture?.state || "").toLowerCase() === "post") { await this.finishLiveSession(); return; }
       const fixtureState = String(this.room.fixture?.state || "").toLowerCase(), fixtureStatus = String(this.room.fixture?.status || ""), hasLiveTimeline = this.room.timeline.some(event => event.offset != null); const fixtureIsLive = fixtureState === "in" || (fixtureState !== "post" && hasLiveTimeline), fixtureIsAtHalfTime = /half[\s-]?time|end of (the )?1st half|\bHT\b|\binterval\b/i.test(fixtureStatus);
-      // Resolve every open call against newly ingested provider events before
-      // considering whether the next scheduled call should open.
+      // Reconcile every resolved call in this poll. Calls are independent:
+      // one open call must never block another call or the next scheduled slot.
       const openRounds = [...(s.rounds || []), s.round].filter(round => round?.status === "voting" || round?.status === "locked");
-      const resolvedRound = openRounds.find(round => this.eventForLiveRound(round) || this.room.fixture.state === "post");
-      if (resolvedRound) { await this.settleLiveRound(resolvedRound); return; }
-      if (s.status === "running" && fixtureIsLive && Date.now() >= (s.nextQuestionAt || 0)) { if (fixtureIsAtHalfTime) { while (s.nextQuestionAt && s.nextQuestionAt <= Date.now()) s.nextQuestionAt += LIVE_CALL_INTERVAL_MS; await this.save(); this.broadcast(); this.schedule(this.providerPollDelayMs()); return; } await this.openLiveRound(); return; }
+      const resolvedRounds = openRounds.filter(round => this.eventForLiveRound(round) || this.room.fixture.state === "post");
+      for (const resolvedRound of resolvedRounds) await this.settleLiveRound(resolvedRound, true);
+      if (resolvedRounds.length) {
+        await this.save();
+        this.broadcast();
+      }
+      if (s.status === "running" && fixtureIsLive && Date.now() >= (s.nextQuestionAt || 0)) {
+        if (fixtureIsAtHalfTime) {
+          while (s.nextQuestionAt && s.nextQuestionAt <= Date.now()) s.nextQuestionAt += LIVE_CALL_INTERVAL_MS;
+          await this.save();
+          this.broadcast();
+          this.schedule(this.providerPollDelayMs());
+          return;
+        }
+        await this.openLiveRound();
+        return;
+      }
       if (s.status === "complete") return;
       await this.save(); this.broadcast(); this.schedule(Math.min(this.providerPollDelayMs(), Math.max(250, (s.nextQuestionAt || Date.now() + this.providerPollDelayMs()) - Date.now()))); return;
     }
@@ -1138,12 +1176,17 @@ export class MatchRoom {
       return true;
     }) || null;
   }
-  async settleLiveRound(round) {
+  async settleLiveRound(round, deferIO = false) {
     const target = this.eventForLiveRound(round);
     const correct = target ? this.keyForQuestion({ type: "first-goal-team" }, target) : null;
     round.result = { correct, event: target?.text || `No ${round.targetType} recorded during the call`, eventId: target?.id || null }; round.status = "settled";
     for (const p of this.room.players) { const answer = this.room.predictions[p.id]?.[round.id]; if (correct && answer === correct) { p.points = (p.points || 0) + 100; p.correct = (p.correct || 0) + 1; } if (answer) p.rounds = (p.rounds || 0) + 1; }
-    this.rebuildLeaderboard(); this.room.events.unshift({ label: "Prediction settled", detail: round.result.event }); await this.save(); this.broadcast(); this.schedule(Math.min(this.providerPollDelayMs(), Math.max(250, (this.room.session.nextQuestionAt || Date.now() + this.providerPollDelayMs()) - Date.now())));
+    this.rebuildLeaderboard(); this.room.events.unshift({ label: "Prediction settled", detail: round.result.event });
+    if (!deferIO) {
+      await this.save();
+      this.broadcast();
+      this.schedule(Math.min(this.providerPollDelayMs(), Math.max(250, (this.room.session.nextQuestionAt || Date.now() + this.providerPollDelayMs()) - Date.now())));
+    }
   }
   async webSocketMessage(ws, raw) {
     let m; try { m = JSON.parse(raw); } catch { return; } if (!this.room) await this.load(); this.room.lastActivity = Date.now();
