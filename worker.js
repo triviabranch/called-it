@@ -732,19 +732,15 @@ export class MatchRoom {
     const committedCalls = this.room.players.map(player => {
       const predictions = this.room.predictions[player.id] || {}, calls = [];
       const knownQuestions = [...(this.room.preMatch || []), ...(this.room.playerPreMatch?.[player.id] || []), ...(this.room.session?.rounds || []), this.room.session?.round].filter(Boolean);
-      if (Array.isArray(player.callRecords) && player.callRecords.length) {
-        const recordedCalls = player.callRecords.map(record => {
-          const question = knownQuestions.find(item => String(item.id) === String(record.id));
-          const answer = record.answer;
-          return { id: record.id, question: record.question || question?.question || "Question unavailable", answer: answerLabel(record.choices?.length ? { choices: record.choices } : question, answer), status: question ? statusFor(question, answer) : "Committed", matchTime: record.matchTime || "IN PLAY" };
-        });
-        return { id: player.id, name: player.name, calls: recordedCalls, points: player.points || 0, correct: player.correct || 0 };
-      }
       const added = new Set();
       const addCall = (id, question, answer, status, matchTime) => {
         if (answer == null || added.has(String(id))) return;
         added.add(String(id)); calls.push({ id, question: question?.question || question?.label || String(question || "Call"), answer: answerLabel(question, answer), status: statusFor(question, answer) || status || "Committed", matchTime });
       };
+      for (const record of (player.callRecords || [])) {
+        const question = knownQuestions.find(item => String(item.id) === String(record.id));
+        addCall(record.id, record.question ? { question: record.question, choices: record.choices || [] } : question || { question: "Question unavailable" }, record.answer, "Committed", record.matchTime || "IN PLAY");
+      }
       for (const question of [...(this.room.preMatch || []), ...(this.room.playerPreMatch?.[player.id] || [])]) {
         const answer = predictions.pre?.[question.id];
         addCall(question.id, question, answer, "Committed", question.type?.startsWith("next-") ? "IN PLAY" : "BEFORE KICK-OFF");
@@ -755,9 +751,13 @@ export class MatchRoom {
         const resolvedAt = round.status === "settled" && resolvingEvent?.minute != null ? `${resolvingEvent.minute}'` : null;
         addCall(round.id, round, answer, "Committed", resolvedAt || round.presentedMatchTime || formatMatchTime(round.presentedAtClock, round.presentedAtClockDisplay));
       }
-      // Only render predictions attached to a known pre-match question or
-      // live round. Internal/legacy keys without a question snapshot are not
-      // player-facing calls and must not appear on the scorecard.
+      for (const [id, answer] of Object.entries(predictions.pre || {})) {
+        addCall(id, knownQuestions.find(item => String(item.id) === String(id)) || { question: "Question unavailable" }, answer, "Committed", "BEFORE KICK-OFF");
+      }
+      for (const [id, answer] of Object.entries(predictions)) {
+        if (id === "pre") continue;
+        addCall(id, knownQuestions.find(item => String(item.id) === String(id)) || { question: "Question unavailable" }, answer, "Committed", "IN PLAY");
+      }
       return { id: player.id, name: player.name, calls, points: player.points || 0, correct: player.correct || 0 };
     });
     const settledEventIds = [...(this.room.preMatch || []), ...rounds].map(item => item.result?.eventId).filter(Boolean).map(String);
