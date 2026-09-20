@@ -1257,9 +1257,18 @@ export class MatchRoom {
       return;
     }
     if (this.sockets.size === 0) {
-      if (this.room) await this.removeAdminRoom();
-      if (this.room) { await this.state.storage.delete("room"); this.room = null; }
-      await this.state.storage.deleteAlarm();
+      // Keep an in-progress live room authoritative across browser refreshes.
+      // The previous socket can briefly disappear during a reload; deleting the
+      // room here would recreate the session and reset its persisted call clock.
+      const liveRoom = this.room?.mode === "live" && this.room?.session?.status !== "complete";
+      if (liveRoom) {
+        await this.state.storage.put("room", this.room);
+        this.schedule(30000);
+      } else {
+        if (this.room) await this.removeAdminRoom();
+        if (this.room) { await this.state.storage.delete("room"); this.room = null; }
+        await this.state.storage.deleteAlarm();
+      }
     } else {
       await this.load();
       await this.advance();
