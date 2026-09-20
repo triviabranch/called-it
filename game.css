@@ -272,3 +272,16 @@ h1,h2,.card h2,.match-header h1,.call-modal h2,.leaderboard-modal h2{font-family
   .match-header-leaderboard{top:39px;right:14px;padding:6px 9px}
   .match-header h1{padding-top:48px}
 }
+
+
+/* Live status belongs in the card's top-left corner */
+.scoreboard-live-marker{
+  left:20px;
+  right:auto;
+}
+@media(max-width:500px){
+  .scoreboard-live-marker{
+    left:14px;
+    right:auto;
+  }
+}
