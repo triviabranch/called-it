@@ -301,3 +301,27 @@ h1,h2,.card h2,.match-header h1,.call-modal h2,.leaderboard-modal h2{font-family
 @media(max-width:500px){
   .match-header h1{padding-top:0}
 }
+
+
+/* Compact live status row and feed call timer */
+.scoreboard-live-marker{
+  gap:10px;
+}
+.scoreboard-live-clock{
+  color:var(--paper);
+  font:700 11px monospace;
+  letter-spacing:.05em;
+  padding-left:10px;
+  border-left:1px solid rgba(238,232,220,.42);
+}
+.feed-next-call{
+  margin-left:auto;
+  color:var(--muted);
+  font:10px monospace;
+  letter-spacing:.04em;
+  white-space:nowrap;
+}
+.feed-next-call b{
+  color:var(--yellow);
+  font-weight:700;
+}
