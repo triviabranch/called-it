@@ -294,3 +294,10 @@ h1,h2,.card h2,.match-header h1,.call-modal h2,.leaderboard-modal h2{font-family
   .match-header-leaderboard{top:10px}
   .match-header h1{padding-top:34px}
 }
+
+
+/* The header row already has its own reserved height */
+.match-header h1{padding-top:0}
+@media(max-width:500px){
+  .match-header h1{padding-top:0}
+}
