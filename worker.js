@@ -763,6 +763,7 @@ export class MatchRoom {
   }
   broadcast() { this.sockets = new Set(this.state.getWebSockets ? this.state.getWebSockets() : this.sockets); const m = JSON.stringify({ type: "state", state: this.public() }); for (const ws of this.sockets) { try { ws.send(m); } catch {} } }
   schedule(ms) { this.state.storage.setAlarm(Date.now() + Math.max(250, Math.min(ms, 7200000))); }
+  providerPollDelayMs() { const seconds = Number(this.room?.provider?.pollIntervalSeconds) || 15; return Math.max(15000, Math.min(120000, seconds * 1000)); }
   lineupChoices() {
     return [...new Map((this.room.lineups || []).map(player => [player.key, { key: player.key, label: player.label, team: player.team }])).values()];
   }
@@ -880,13 +881,21 @@ export class MatchRoom {
       }
       this.room.lastProviderEventIds = this.room.timeline.map(e => e.id);
       this.room.lastLivePollAt = Date.now();
+      this.room.provider.error = null;
+      this.room.provider.errorCount = 0;
       this.room.provider.playsSource = source;
       this.room.provider.playsProcessed = incoming.length;
       this.room.provider.pollIntervalSeconds = 15;
       this.room.provider.corePaginationIntervalSeconds = 60;
       if (paginateCore) this.room.lastCorePaginationAt = now;
       if (this.room.session.status === "running" || this.room.fixture?.state === "in") { const liveClock = this.liveClock(nextFixture, data); this.room.session.clock = liveClock.seconds; this.room.session.clockDisplay = liveClock.display; }
-    } catch (error) { this.room.provider.error = error.message || "Live feed unavailable"; }
+    } catch (error) {
+      const errorCount = (Number(this.room.provider.errorCount) || 0) + 1;
+      this.room.provider.error = error.message || "Live feed unavailable";
+      this.room.provider.errorCount = errorCount;
+      this.room.provider.lastErrorAt = Date.now();
+      this.room.provider.pollIntervalSeconds = Math.min(120, 15 * (2 ** Math.min(errorCount, 3)));
+    }
   }
   liveClock(fixtureData, summary) {
     const status = fixtureData.status || {};
@@ -957,7 +966,7 @@ export class MatchRoom {
       this.room.session.nextQuestionAt = scheduledCallAt + LIVE_CALL_INTERVAL_MS;
       // Keep the single room-level ESPN poll alive while a call is open.
       // The next call cadence is independent of provider polling.
-      await this.save(); this.broadcast(); this.schedule(LIVE_PROVIDER_POLL_MS);
+      await this.save(); this.broadcast(); this.schedule(this.providerPollDelayMs());
       return;
     }
     const type = this.nextLiveType(), f = this.room.fixture || {};
@@ -969,7 +978,7 @@ export class MatchRoom {
     // Continue polling ESPN every 15 seconds while this call is open.
     // Call creation remains anchored to nextQuestionAt and is handled by the
     // next alarm; this remains one alarm per active room, not per player.
-    await this.save(); this.broadcast(); this.schedule(LIVE_PROVIDER_POLL_MS);
+    await this.save(); this.broadcast(); this.schedule(this.providerPollDelayMs());
   }
   targetForQuestion(q) { return this.room.timeline.find(e => (((q.type === "first-goal-team" || q.type === "next-goal-team" || q.type === "first-goalscorer") && e.type === "goal") || ((q.type === "first-goal-kick-time" || q.type === "next-goal-kick-time") && e.type === "goal-kick") || ((q.type === "first-foul-team" || q.type === "next-foul-team") && e.type === "foul")) && !(q.baselineEventIds || []).includes(String(e.id)) && (q.afterOffset == null || e.offset > q.afterOffset)); }
   keyForQuestion(q, target) {
@@ -1046,12 +1055,12 @@ export class MatchRoom {
       this.anchorLiveSchedule();
       this.settlePreMatch(s.clock);
       if (String(this.room.fixture?.state || "").toLowerCase() === "post") { await this.finishLiveSession(); return; }
-      const fixtureState = String(this.room.fixture?.state || "").toLowerCase(), fixtureStatus = String(this.room.fixture?.status || ""), hasLiveTimeline = this.room.timeline.some(event => event.offset != null); const fixtureIsLive = fixtureState === "in" || (fixtureState !== "post" && hasLiveTimeline), fixtureIsAtHalfTime = /half[\s-]?time|end of (the )?1st half|\bHT\b|\binterval\b/i.test(fixtureStatus); if (s.status === "running" && fixtureIsLive && Date.now() >= (s.nextQuestionAt || 0)) { if (fixtureIsAtHalfTime) { while (s.nextQuestionAt && s.nextQuestionAt <= Date.now()) s.nextQuestionAt += LIVE_CALL_INTERVAL_MS; await this.save(); this.broadcast(); this.schedule(LIVE_PROVIDER_POLL_MS); return; } await this.openLiveRound(); return; }
+      const fixtureState = String(this.room.fixture?.state || "").toLowerCase(), fixtureStatus = String(this.room.fixture?.status || ""), hasLiveTimeline = this.room.timeline.some(event => event.offset != null); const fixtureIsLive = fixtureState === "in" || (fixtureState !== "post" && hasLiveTimeline), fixtureIsAtHalfTime = /half[\s-]?time|end of (the )?1st half|\bHT\b|\binterval\b/i.test(fixtureStatus); if (s.status === "running" && fixtureIsLive && Date.now() >= (s.nextQuestionAt || 0)) { if (fixtureIsAtHalfTime) { while (s.nextQuestionAt && s.nextQuestionAt <= Date.now()) s.nextQuestionAt += LIVE_CALL_INTERVAL_MS; await this.save(); this.broadcast(); this.schedule(this.providerPollDelayMs()); return; } await this.openLiveRound(); return; }
       const openRounds = [...(s.rounds || []), s.round].filter(round => round?.status === "voting" || round?.status === "locked");
       const resolvedRound = openRounds.find(round => this.eventForLiveRound(round) || this.room.fixture.state === "post");
       if (resolvedRound) { await this.settleLiveRound(resolvedRound); return; }
       if (s.status === "complete") return;
-      await this.save(); this.broadcast(); this.schedule(Math.min(LIVE_PROVIDER_POLL_MS, Math.max(250, (s.nextQuestionAt || Date.now() + LIVE_PROVIDER_POLL_MS) - Date.now()))); return;
+      await this.save(); this.broadcast(); this.schedule(Math.min(this.providerPollDelayMs(), Math.max(250, (s.nextQuestionAt || Date.now() + this.providerPollDelayMs()) - Date.now()))); return;
     }
     if (!r) return;
     if (s.manualPaused) return;
