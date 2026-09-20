@@ -746,8 +746,8 @@ export class MatchRoom {
         const resolvedAt = round.status === "settled" && resolvingEvent?.minute != null ? `${resolvingEvent.minute}'` : null;
         addCall(round.id, round, answer, "Committed", resolvedAt || round.presentedMatchTime || formatMatchTime(round.presentedAtClock, round.presentedAtClockDisplay));
       }
-      for (const [id, answer] of Object.entries(predictions.pre || {})) addCall(id, { question: "Pre-match call" }, answer, "Committed", "BEFORE KICK-OFF");
-      for (const [id, answer] of Object.entries(predictions)) if (id !== "pre") addCall(id, { question: "Match call" }, answer, "Committed", "IN PLAY");
+      // Only render predictions attached to a known question/round. Do not
+      // expose internal answer keys such as "home" or "away" as fake calls.
       return { id: player.id, name: player.name, calls, points: player.points || 0, correct: player.correct || 0 };
     });
     const settledEventIds = [...(this.room.preMatch || []), ...rounds].map(item => item.result?.eventId).filter(Boolean).map(String);
