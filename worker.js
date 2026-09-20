@@ -753,7 +753,7 @@ export class MatchRoom {
         addCall(id, { question: "Pre-match call", choices: [{ key: "home", label: this.room.fixture?.home?.name || "Home" }, { key: "away", label: this.room.fixture?.away?.name || "Away" }] }, answer, "Committed", "BEFORE KICK-OFF");
       }
       for (const [id, answer] of Object.entries(predictions)) {
-        if (id === "pre" || id === "home" || id === "away") continue;
+        if (id === "pre") continue;
         addCall(id, { question: "Live call", choices: [{ key: "home", label: this.room.fixture?.home?.name || "Home" }, { key: "away", label: this.room.fixture?.away?.name || "Away" }] }, answer, "Committed", "IN PLAY");
       }
       return { id: player.id, name: player.name, calls, points: player.points || 0, correct: player.correct || 0 };
