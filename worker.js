@@ -179,6 +179,8 @@ function eventClock(item) {
 }
 function eventType(item) {
   const kind = String(item?.type?.type || item?.type?.name || "").toLowerCase();
+  const reversalText = [item?.type?.text, item?.type?.name, item?.text, item?.shortText, item?.description, item?.detail].filter(Boolean).join(" ").toLowerCase();
+  if (/no goal|goal (?:disallowed|overturned|cancelled)|(?:disallowed|overturned|cancelled).*goal|var.*(?:no goal|disallowed|overturned|cancelled)/.test(reversalText)) return "var";
   // NRL uses rugby scoring terminology rather than football's goal events.
   // Keep tries and other scoring plays in the existing score-resolution lane
   // while retaining conversions as a visible feed event.
@@ -221,7 +223,7 @@ function normaliseEvent(item, index, source) {
     return athlete?.displayName || athlete?.fullName || athlete?.shortName || athlete?.name || (typeof athlete === "string" ? athlete : "");
   }).filter(Boolean))];
   const team = item?.team?.displayName || item?.team?.shortDisplayName || item?.team?.name || item?.competitor?.team?.displayName || item?.competitor?.displayName || null;
-  return { id: String(item?.id || (source + "-" + index)), source, type: eventType(item), offset, minute, period: item?.period?.number || item?.period?.displayValue || null, text, athletes, team, raw: item };
+  return { id: String(item?.id || (source + "-" + index)), source, type: eventType(item), offset, minute, period: item?.period?.number || item?.period?.displayValue || null, text, athletes, team, valid: item?.valid !== false, scoringPlay: Boolean(item?.scoringPlay), raw: item };
 }
 function normaliseCorePlay(item, index) { return normaliseEvent({ ...item, text: item.text || item.shortText || item.alternativeText || item.type?.text }, index, "core-play"); }
 function normaliseCommentary(item, index) { const play = item?.play || item; return normaliseEvent({ ...play, clock: play.clock || item.time, text: item.text || play.text || play.shortText }, index, "commentary"); }
@@ -902,17 +904,45 @@ export class MatchRoom {
             text: event.text || existing.text,
             team: event.team || existing.team || null,
             committingTeam: event.type === "foul" ? (foulCommittingTeam(event, this.room.fixture) || existing.committingTeam || null) : (event.team || existing.committingTeam || null),
-            athletes: event.athletes?.length ? event.athletes : (existing.athletes || [])
+            athletes: event.athletes?.length ? event.athletes : (existing.athletes || []),
+            valid: event.valid !== false,
+            scoringPlay: event.scoringPlay || existing.scoringPlay || false
           });
           byId.set(String(event.id), existing);
           byShape.set(key, existing);
           continue;
         }
-        const canonical = { id: event.id, type: event.type, offset: event.offset, minute: event.minute, text: event.text, team: event.team || null, committingTeam: foulCommittingTeam(event, this.room.fixture), athletes: event.athletes || [] };
+        const canonical = { id: event.id, type: event.type, offset: event.offset, minute: event.minute, text: event.text, team: event.team || null, committingTeam: foulCommittingTeam(event, this.room.fixture), athletes: event.athletes || [], valid: event.valid !== false, scoringPlay: event.scoringPlay || false };
         this.room.timeline.push(canonical);
         byId.set(String(event.id), canonical);
         byShape.set(key, canonical);
         this.room.events.unshift({ label: event.type === "goal" ? "GOAL" : "Match update", detail: event.text });
+      }
+      const reversalEvents = incoming.filter(event => event.type === "var" && /no goal|goal (?:disallowed|overturned|cancelled)|(?:disallowed|overturned|cancelled).*goal|var.*(?:no goal|disallowed|overturned|cancelled)/i.test(String(event.text || "")));
+      const invalidGoalIds = new Set(incoming.filter(event => event.type === "goal" && event.valid === false).map(event => String(event.id)));
+      for (const reversal of reversalEvents) {
+        const candidate = this.room.timeline
+          .filter(event => event.type === "goal" && event.valid !== false && Number(event.offset) <= Number(reversal.offset) && Number(reversal.offset) - Number(event.offset) <= 180)
+          .sort((a, b) => Number(b.offset) - Number(a.offset))[0];
+        if (candidate) invalidGoalIds.add(String(candidate.id));
+      }
+      if (invalidGoalIds.size) {
+        this.room.timeline = this.room.timeline.filter(event => !invalidGoalIds.has(String(event.id)));
+        const allRounds = [...(this.room.session?.rounds || []), this.room.session?.round].filter(Boolean);
+        for (const round of allRounds) {
+          if (!invalidGoalIds.has(String(round.result?.eventId))) continue;
+          const correct = round.result?.correct;
+          for (const player of this.room.players) {
+            const answer = this.room.predictions[player.id]?.[round.id];
+            if (correct && answer === correct) {
+              player.points = Math.max(0, (player.points || 0) - 100);
+              player.correct = Math.max(0, (player.correct || 0) - 1);
+            }
+          }
+          round.result = null;
+          round.status = "locked";
+        }
+        this.room.events.unshift({ label: "VAR overturn", detail: "A provisional goal was removed" });
       }
       this.room.timeline.sort((a, b) => a.offset - b.offset);
       const homeName = String(this.room.fixture.home?.name || "").toLowerCase();
@@ -920,9 +950,9 @@ export class MatchRoom {
       const goals = this.room.timeline.filter(event => event.type === "goal");
       const homeGoals = goals.filter(event => String(event.team || "").toLowerCase() === homeName).length;
       const awayGoals = goals.filter(event => String(event.team || "").toLowerCase() === awayName).length;
-      if (homeGoals || awayGoals) {
-        this.room.fixture.home.score = Math.max(Number(this.room.fixture.home.score) || 0, homeGoals);
-        this.room.fixture.away.score = Math.max(Number(this.room.fixture.away.score) || 0, awayGoals);
+      if (homeGoals || awayGoals || this.room.timeline.some(event => event.type === "goal")) {
+        this.room.fixture.home.score = homeGoals;
+        this.room.fixture.away.score = awayGoals;
       }
       this.room.lastProviderEventIds = this.room.timeline.map(e => e.id);
       this.room.lastLivePollAt = Date.now();
