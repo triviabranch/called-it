@@ -325,3 +325,21 @@ h1,h2,.card h2,.match-header h1,.call-modal h2,.leaderboard-modal h2{font-family
   color:var(--yellow);
   font-weight:700;
 }
+
+
+/* Leaderboard: compact corner action, no surrounding box */
+.match-header-leaderboard{
+  top:13px;
+  right:14px;
+  padding:3px 0;
+  border:0;
+  color:var(--paper);
+  background:transparent;
+}
+@media(max-width:500px){
+  .match-header-leaderboard{
+    top:10px;
+    right:10px;
+    padding:2px 0;
+  }
+}
