@@ -20,6 +20,10 @@ const clock = (seconds, display) => {
 const send = message => { if (ws?.readyState === 1) ws.send(JSON.stringify(message)); };
 const formatCountdown = seconds => seconds <= 0 ? "SOON" : `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 setInterval(() => {
+  if (ws?.readyState === 1 && roomId) ws.send(JSON.stringify({ type: "sync" }));
+}, 15000);
+
+setInterval(() => {
   const now = Date.now();
   const next = document.querySelector("[data-next-call-countdown]");
   if (next) next.querySelector("b").textContent = formatCountdown(Math.max(0, Math.ceil((Number(next.dataset.nextCallAt) - now) / 1000)));
