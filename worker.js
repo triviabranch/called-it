@@ -838,7 +838,7 @@ export class MatchRoom {
       ? Math.max(this.room.session?.clock || 0, ...this.room.timeline.filter(event => event.type === type).map(event => Number(event.offset) || 0))
       : null;
     return [
-      { id: (nextGoal ? "next-goal-team" : "first-goal-team") + suffix, type: nextGoal ? "next-goal-team" : "first-goal-team", question: nextGoal ? "Which team scores next?" : "Which team scores first?", choices: [{ key: "home", label: home }, { key: "away", label: away }], settled: false, result: null, afterOffset: after(nextGoal, "goal"), baselineEventIds },
+      { id: (nextGoal ? "next-goal-team" : "first-goal-team") + suffix, type: nextGoal ? "next-goal-team" : "first-goal-team", question: nextGoal ? "Which team scores next?" : "Which team scores first?", choices: [{ key: "home", label: home }, { key: "away", label: away }, { key: "none", label: nextGoal ? "No further goals" : "No goals" }], settled: false, result: null, afterOffset: after(nextGoal, "goal"), baselineEventIds },
       ...((lateJoin || !this.lineupChoices().length) ? [] : [{ id: "first-goalscorer", type: "first-goalscorer", question: "Who scores first?", choices: this.lineupChoices(), settled: false, result: null, afterOffset: null, baselineEventIds }]),
       { id: (nextGoalKick ? "next-goal-kick-time" : "first-goal-kick-time") + suffix, type: nextGoalKick ? "next-goal-kick-time" : "first-goal-kick-time", question: nextGoalKick ? "What’s the time of the next goal kick?" : "What’s the time of the first goal kick?", input: { min: 0, max: 120, step: 1, value: currentMinutes, suffix: "minutes", lateJoin: nextGoalKick }, choices: [], settled: false, result: null, afterOffset: after(nextGoalKick, "goal-kick"), baselineEventIds },
       { id: (nextFoul ? "next-foul-team" : "first-foul-team") + suffix, type: nextFoul ? "next-foul-team" : "first-foul-team", question: nextFoul ? "Which team commits the next foul?" : "Which team commits the first foul?", choices: [{ key: "home", label: home }, { key: "away", label: away }], settled: false, result: null, afterOffset: after(nextFoul, "foul"), baselineEventIds }
@@ -1078,7 +1078,9 @@ export class MatchRoom {
       }
     }
     const presentedAtClock = Number(this.room.session.clock) || 0, presentedAtClockDisplay = this.room.session.clockDisplay || null;
-    const round = { id: "round-" + (this.room.session.nextRoundIndex || 0), scheduledCallAt, targetEventId: null, targetType: type, question: this.liveQuestion(type), choices: [{ key: "home", label: f.home?.name || "Home" }, { key: "away", label: f.away?.name || "Away" }], status: "voting", warmupEndsAt: null, voteEndsAt: null, result: null, openedAt: Date.now(), presentedAtClock, presentedAtClockDisplay, presentedMatchTime: formatMatchTime(presentedAtClock, presentedAtClockDisplay), baselineEventIds: this.room.timeline.map(e => e.id) };
+    const choices = [{ key: "home", label: f.home?.name || "Home" }, { key: "away", label: f.away?.name || "Away" }];
+    if (type === "goal") choices.push({ key: "none", label: "No further goals" });
+    const round = { id: "round-" + (this.room.session.nextRoundIndex || 0), scheduledCallAt, targetEventId: null, targetType: type, question: this.liveQuestion(type), choices, status: "voting", warmupEndsAt: null, voteEndsAt: null, result: null, openedAt: Date.now(), presentedAtClock, presentedAtClockDisplay, presentedMatchTime: formatMatchTime(presentedAtClock, presentedAtClockDisplay), baselineEventIds: this.room.timeline.map(e => e.id) };
     this.room.callArchive ||= [];
     if (!this.room.callArchive.some(call => String(call.id) === String(round.id))) {
       this.room.callArchive.push({
@@ -1146,12 +1148,34 @@ export class MatchRoom {
   }
   async finishLiveSession() {
     const session = this.room.session;
+    const settleGoalQuestion = (question, playerId = null) => {
+      if (!question || question.settled || !["first-goal-team", "next-goal-team"].includes(question.type)) return;
+      const target = this.targetForQuestion(question);
+      const correct = target ? this.keyForQuestion(question, target) : "none";
+      question.settled = true;
+      question.result = { correct, event: target?.text || (question.type === "next-goal-team" ? "Full time — no further goals" : "Full time — no goals"), eventId: target?.id || null };
+      const players = playerId ? this.room.players.filter(player => player.id === playerId) : this.room.players;
+      for (const player of players) {
+        const answer = this.room.predictions[player.id]?.pre?.[question.id];
+        if (answer) player.calls = Math.max(player.calls || 0, Object.keys(this.room.predictions[player.id]?.pre || {}).length);
+        if (answer && correct && answer === correct) { player.points = (player.points || 0) + 100; player.correct = (player.correct || 0) + 1; }
+      }
+    };
+    for (const question of this.room.preMatch || []) settleGoalQuestion(question);
+    for (const [playerId, questions] of Object.entries(this.room.playerPreMatch || {})) for (const question of questions) settleGoalQuestion(question, playerId);
     session.rounds ||= [];
     if (session.round && !session.rounds.some(round => round.id === session.round.id)) session.rounds.push(session.round);
     for (const round of session.rounds) {
       if (round.status === "voting" || round.status === "locked") {
-        round.result = { correct: null, event: "Full time", eventId: null };
+        const target = this.eventForLiveRound(round);
+        const correct = target ? this.keyForQuestion({ type: round.targetType }, target) : round.targetType === "goal" ? "none" : null;
+        round.result = { correct, event: target?.text || (correct === "none" ? "Full time — no further goals" : "Full time"), eventId: target?.id || null };
         round.status = "settled";
+        for (const player of this.room.players) {
+          const answer = this.room.predictions[player.id]?.[round.id];
+          if (answer) player.rounds = (player.rounds || 0) + 1;
+          if (answer && correct && answer === correct) { player.points = (player.points || 0) + 100; player.correct = (player.correct || 0) + 1; }
+        }
       }
     }
     session.round = null;
