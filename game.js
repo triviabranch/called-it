@@ -173,6 +173,12 @@ function showJoinModal(fixture, league) {
     showOpeningModal(fixture);
     return;
   }
+  const knownRoomId = fixture?.id ? localStorage.getItem(`calledItRoom:${fixture.id}`) : "";
+  const knownToken = knownRoomId ? localStorage.getItem(`calledItPlayerToken:${knownRoomId}`) : "";
+  if (knownRoomId && knownToken) {
+    openRoomInNewTab(knownRoomId);
+    return;
+  }
   document.querySelectorAll(".join-modal-backdrop").forEach(item => item.remove());
   const modal = document.createElement("div"); modal.className = "join-modal-backdrop";
   const liveLabel = fixture.state === "in" ? "LIVE NOW" : scheduledTime(fixture.date);
@@ -191,11 +197,24 @@ function showJoinModal(fixture, league) {
   document.addEventListener("keydown", onKey);
   modal.querySelector("input").focus();
 }
+function openRoomInNewTab(roomId) {
+  const url = `/play/${encodeURIComponent(roomId)}`;
+  const roomTab = window.open("about:blank", "_blank");
+  if (roomTab) {
+    roomTab.opener = null;
+    roomTab.location.href = url;
+    return true;
+  }
+  location.href = url;
+  return false;
+}
 async function joinFixture(fixture, league, name = "") {
   if (!fixture) return;
   if (name) localStorage.setItem(`calledItPendingName:${fixture.id}`, name);
   const button = document.querySelector(`[data-fixture="${CSS.escape(fixture.id)}"] .fixture-open`); if (button) button.disabled = true;
-  try { const response = await fetch("/api/room/fixture", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({ fixture, sport: fixture.sport || "soccer", league, mode:"live" }) }); const data = await response.json().catch(() => ({})); if (data.error === "too_early" || data.opensAt) { if (button) button.disabled = false; showOpeningModal({ ...fixture, opensAt: data.opensAt }); return; } if (!response.ok || !data.roomId) throw Error(data.error || "Could not open fixture room"); location.href = `/play/${encodeURIComponent(data.roomId)}`; } catch (error) { if (button) button.disabled = false; alert(error.message); }
+  const roomTab = window.open("about:blank", "_blank");
+  if (roomTab) roomTab.opener = null;
+  try { const response = await fetch("/api/room/fixture", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({ fixture, sport: fixture.sport || "soccer", league, mode:"live" }) }); const data = await response.json().catch(() => ({})); if (data.error === "too_early" || data.opensAt) { roomTab?.close(); if (button) button.disabled = false; showOpeningModal({ ...fixture, opensAt: data.opensAt }); return; } if (!response.ok || !data.roomId) throw Error(data.error || "Could not open fixture room"); localStorage.setItem(`calledItRoom:${fixture.id}`, String(data.roomId)); if (roomTab) roomTab.location.href = `/play/${encodeURIComponent(data.roomId)}`; else location.href = `/play/${encodeURIComponent(data.roomId)}`; } catch (error) { roomTab?.close(); if (button) button.disabled = false; alert(error.message); }
 }
 function attemptPendingJoin() {
   if (!state?.fixture?.id || pendingJoinSent) return;
