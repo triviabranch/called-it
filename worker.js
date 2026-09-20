@@ -723,7 +723,7 @@ export class MatchRoom {
   public() {
     if (this.room.fixture?.id && !this.room.preMatch?.length) this.room.preMatch = this.buildPreMatch();
     const rounds = [...(this.room.session?.rounds || []), this.room.session?.round].filter(Boolean);
-    const answerLabel = (item, answer) => item?.choices?.find(choice => choice.key === answer)?.label || String(answer || "");
+    const answerLabel = (item, answer) => item?.choices?.find(choice => choice.key === answer)?.label || (answer === "home" ? this.room.fixture?.home?.name || "Home" : answer === "away" ? this.room.fixture?.away?.name || "Away" : String(answer || ""));
     const statusFor = (item, answer) => {
       if (item?.status === "settled" || item?.settled) return item.result?.correct && answer === item.result.correct ? "Correct" : "Missed";
       if (item?.status === "locked") return "Locked";
@@ -746,8 +746,16 @@ export class MatchRoom {
         const resolvedAt = round.status === "settled" && resolvingEvent?.minute != null ? `${resolvingEvent.minute}'` : null;
         addCall(round.id, round, answer, "Committed", resolvedAt || round.presentedMatchTime || formatMatchTime(round.presentedAtClock, round.presentedAtClockDisplay));
       }
-      // Only render predictions attached to a known question/round. Do not
-      // expose internal answer keys such as "home" or "away" as fake calls.
+      // Preserve every legitimate stored prediction, including older rooms
+      // whose round metadata may no longer contain the original call. The
+      // internal home/away keys are not calls and must never be rendered.
+      for (const [id, answer] of Object.entries(predictions.pre || {})) {
+        addCall(id, { question: "Pre-match call", choices: [{ key: "home", label: this.room.fixture?.home?.name || "Home" }, { key: "away", label: this.room.fixture?.away?.name || "Away" }] }, answer, "Committed", "BEFORE KICK-OFF");
+      }
+      for (const [id, answer] of Object.entries(predictions)) {
+        if (id === "pre" || id === "home" || id === "away") continue;
+        addCall(id, { question: "Live call", choices: [{ key: "home", label: this.room.fixture?.home?.name || "Home" }, { key: "away", label: this.room.fixture?.away?.name || "Away" }] }, answer, "Committed", "IN PLAY");
+      }
       return { id: player.id, name: player.name, calls, points: player.points || 0, correct: player.correct || 0 };
     });
     const settledEventIds = [...(this.room.preMatch || []), ...rounds].map(item => item.result?.eventId).filter(Boolean).map(String);
