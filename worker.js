@@ -1094,10 +1094,13 @@ export class MatchRoom {
       this.anchorLiveSchedule();
       this.settlePreMatch(s.clock);
       if (String(this.room.fixture?.state || "").toLowerCase() === "post") { await this.finishLiveSession(); return; }
-      const fixtureState = String(this.room.fixture?.state || "").toLowerCase(), fixtureStatus = String(this.room.fixture?.status || ""), hasLiveTimeline = this.room.timeline.some(event => event.offset != null); const fixtureIsLive = fixtureState === "in" || (fixtureState !== "post" && hasLiveTimeline), fixtureIsAtHalfTime = /half[\s-]?time|end of (the )?1st half|\bHT\b|\binterval\b/i.test(fixtureStatus); if (s.status === "running" && fixtureIsLive && Date.now() >= (s.nextQuestionAt || 0)) { if (fixtureIsAtHalfTime) { while (s.nextQuestionAt && s.nextQuestionAt <= Date.now()) s.nextQuestionAt += LIVE_CALL_INTERVAL_MS; await this.save(); this.broadcast(); this.schedule(this.providerPollDelayMs()); return; } await this.openLiveRound(); return; }
+      const fixtureState = String(this.room.fixture?.state || "").toLowerCase(), fixtureStatus = String(this.room.fixture?.status || ""), hasLiveTimeline = this.room.timeline.some(event => event.offset != null); const fixtureIsLive = fixtureState === "in" || (fixtureState !== "post" && hasLiveTimeline), fixtureIsAtHalfTime = /half[\s-]?time|end of (the )?1st half|\bHT\b|\binterval\b/i.test(fixtureStatus);
+      // Resolve every open call against newly ingested provider events before
+      // considering whether the next scheduled call should open.
       const openRounds = [...(s.rounds || []), s.round].filter(round => round?.status === "voting" || round?.status === "locked");
       const resolvedRound = openRounds.find(round => this.eventForLiveRound(round) || this.room.fixture.state === "post");
       if (resolvedRound) { await this.settleLiveRound(resolvedRound); return; }
+      if (s.status === "running" && fixtureIsLive && Date.now() >= (s.nextQuestionAt || 0)) { if (fixtureIsAtHalfTime) { while (s.nextQuestionAt && s.nextQuestionAt <= Date.now()) s.nextQuestionAt += LIVE_CALL_INTERVAL_MS; await this.save(); this.broadcast(); this.schedule(this.providerPollDelayMs()); return; } await this.openLiveRound(); return; }
       if (s.status === "complete") return;
       await this.save(); this.broadcast(); this.schedule(Math.min(this.providerPollDelayMs(), Math.max(250, (s.nextQuestionAt || Date.now() + this.providerPollDelayMs()) - Date.now()))); return;
     }
@@ -1129,14 +1132,17 @@ export class MatchRoom {
     return this.room.timeline.find(event => {
       if (String(event.type) !== String(round.targetType)) return false;
       if (baseline.has(String(event.id))) return false;
-      return round.presentedAtClock == null || Number(event.offset) > Number(round.presentedAtClock);
+      // The baseline is authoritative. A provider event can arrive with
+      // a clock slightly behind our room clock; if it was not present when
+      // this call opened, it is still the event that resolves the call.
+      return true;
     }) || null;
   }
   async settleLiveRound(round) {
     const target = this.eventForLiveRound(round);
     const correct = target ? this.keyForQuestion({ type: "first-goal-team" }, target) : null;
     round.result = { correct, event: target?.text || `No ${round.targetType} recorded during the call`, eventId: target?.id || null }; round.status = "settled";
-    for (const p of this.room.players) { const answer = this.room.predictions[p.id]?.[round.id]; if (answer) p.calls = (p.calls || 0) + 1; if (correct && answer === correct) { p.points = (p.points || 0) + 100; p.correct = (p.correct || 0) + 1; } if (answer) p.rounds = (p.rounds || 0) + 1; }
+    for (const p of this.room.players) { const answer = this.room.predictions[p.id]?.[round.id]; if (correct && answer === correct) { p.points = (p.points || 0) + 100; p.correct = (p.correct || 0) + 1; } if (answer) p.rounds = (p.rounds || 0) + 1; }
     this.rebuildLeaderboard(); this.room.events.unshift({ label: "Prediction settled", detail: round.result.event }); await this.save(); this.broadcast(); this.schedule(Math.min(this.providerPollDelayMs(), Math.max(250, (this.room.session.nextQuestionAt || Date.now() + this.providerPollDelayMs()) - Date.now())));
   }
   async webSocketMessage(ws, raw) {
