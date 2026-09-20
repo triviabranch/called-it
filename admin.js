@@ -43,23 +43,23 @@ saveConfig.onclick = async () => {
 
 loadConfig();
 
-regionList.addEventListener("click", event => {
-  const card = event.target.closest("[data-region]");
-  if (!card) return;
-  const selected = card.getAttribute("aria-pressed") === "true";
-  card.setAttribute("aria-pressed", String(!selected));
-  const mark = card.querySelector(".competition-mark");
-  if (mark) mark.textContent = selected ? "+" : "✓";
-});
+function bindSelectionToggles(list, selector) {
+  list.addEventListener("click", event => {
+    const card = event.target.closest(selector);
+    if (!card || !list.contains(card)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const selected = card.getAttribute("aria-pressed") === "true";
+    const nextSelected = !selected;
+    card.setAttribute("aria-pressed", String(nextSelected));
+    card.classList.toggle("is-selected", nextSelected);
+    const mark = card.querySelector(".competition-mark");
+    if (mark) mark.textContent = nextSelected ? "✓" : "+";
+  });
+}
 
-competitionList.addEventListener("click", event => {
-  const card = event.target.closest("[data-competition]");
-  if (!card) return;
-  const selected = card.getAttribute("aria-pressed") === "true";
-  card.setAttribute("aria-pressed", String(!selected));
-  const mark = card.querySelector(".competition-mark");
-  if (mark) mark.textContent = selected ? "+" : "✓";
-});
+bindSelectionToggles(regionList, "[data-region]");
+bindSelectionToggles(competitionList, "[data-competition]");
 
 let liveRooms = [];
 const roomLabel = room => `${room.fixture?.home?.name || "Home"} v ${room.fixture?.away?.name || "Away"}`;
