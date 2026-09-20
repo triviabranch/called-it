@@ -722,6 +722,14 @@ export class MatchRoom {
       events: [{ label: "Fixture room opened", detail: "Live data from ESPN" }], lastProviderEventIds: [], lastLivePollAt: 0
     };
     this.room.callArchive ||= [];
+    const ensureNoGoalChoice = question => {
+      if (!question || !["first-goal-team", "next-goal-team"].includes(question.type) && question.targetType !== "goal") return;
+      question.choices ||= [];
+      if (!question.choices.some(choice => choice.key === "none")) question.choices.push({ key: "none", label: question.type === "first-goal-team" ? "No goals" : "No further goals" });
+    };
+    for (const question of this.room.preMatch || []) ensureNoGoalChoice(question);
+    for (const questions of Object.values(this.room.playerPreMatch || {})) for (const question of questions || []) ensureNoGoalChoice(question);
+    for (const round of [...(this.room.session?.rounds || []), this.room.session?.round].filter(Boolean)) ensureNoGoalChoice(round);
     const knownRounds = [...(this.room.session?.rounds || []), this.room.session?.round].filter(Boolean);
     for (const round of knownRounds) {
       if (!this.room.callArchive.some(call => String(call.id) === String(round.id))) {
