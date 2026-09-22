@@ -14,13 +14,27 @@ const SUPPORTED_COMPETITIONS = [
   { sport: "soccer", league: "fra.1", name: "Ligue 1", order: 8 },
   { sport: "soccer", league: "usa.1", name: "MLS", order: 9 },
   { sport: "soccer", league: "aus.1", name: "A-League Men", order: 10 },
-  { sport: "rugby-league", league: "3", name: "NRL", order: 11 }
+  { sport: "soccer", league: "fifa.world", name: "World Cup", order: 11, international: true },
+  { sport: "soccer", league: "fifa.worldq", name: "World Cup Qualifying", order: 12, international: true },
+  { sport: "soccer", league: "uefa.nations", name: "UEFA Nations League", order: 13, international: true },
+  { sport: "soccer", league: "uefa.euro", name: "European Championship", order: 14, international: true },
+  { sport: "soccer", league: "uefa.euroq", name: "European Championship Qualifying", order: 15, international: true },
+  { sport: "soccer", league: "fifa.friendly", name: "International Friendlies", order: 16, international: true },
+  { sport: "soccer", league: "conmebol.america", name: "Copa América", order: 17, international: true },
+  { sport: "soccer", league: "concacaf.gold", name: "CONCACAF Gold Cup", order: 18, international: true },
+  { sport: "soccer", league: "caf.nations", name: "Africa Cup of Nations", order: 19, international: true },
+  { sport: "soccer", league: "afc.asian.cup", name: "AFC Asian Cup", order: 20, international: true },
+  { sport: "rugby", league: "164205", name: "Rugby World Cup", order: 21, international: true, rugby: true },
+  { sport: "rugby", league: "180659", name: "Six Nations", order: 22, international: true, rugby: true },
+  { sport: "rugby-league", league: "3", name: "NRL", order: 23 }
 ];
 const SUPPORTED_LEAGUES = SUPPORTED_COMPETITIONS.map(item => item.league);
 const LEAGUE_HIERARCHY = Object.fromEntries(SUPPORTED_COMPETITIONS.map(item => [item.league, item.order]));
 const LEAGUE_NAMES = Object.fromEntries(SUPPORTED_COMPETITIONS.map(item => [item.league, item.name]));
 const COMPETITION_KEYS = SUPPORTED_COMPETITIONS.map(item => `${item.sport}:${item.league}`);
-const DEFAULT_ENABLED_COMPETITIONS = SUPPORTED_COMPETITIONS.filter(item => item.sport === "soccer").map(item => `${item.sport}:${item.league}`);
+const INTERNATIONAL_COMPETITION_KEYS = SUPPORTED_COMPETITIONS.filter(item => item.international).map(item => `${item.sport}:${item.league}`);
+const RUGBY_INTERNATIONAL_COMPETITION_KEYS = SUPPORTED_COMPETITIONS.filter(item => item.rugby && item.international).map(item => `${item.sport}:${item.league}`);
+const DEFAULT_ENABLED_COMPETITIONS = SUPPORTED_COMPETITIONS.filter(item => item.sport === "soccer" || item.international).map(item => `${item.sport}:${item.league}`);
 function competitionConfig(sport, league) {
   return SUPPORTED_COMPETITIONS.find(item => item.sport === sport && item.league === league)
     || SUPPORTED_COMPETITIONS.find(item => item.league === league)
@@ -29,6 +43,16 @@ function competitionConfig(sport, league) {
 function normaliseEnabledCompetitions(values) {
   const selected = Array.isArray(values) ? values : DEFAULT_ENABLED_COMPETITIONS;
   return [...new Set(selected)].filter(key => COMPETITION_KEYS.includes(key));
+}
+function migrateEnabledCompetitions(saved) {
+  const enabled = normaliseEnabledCompetitions(saved?.enabledCompetitions);
+  if (!Array.isArray(saved?.enabledCompetitions)) return enabled;
+  const migrated = saved?.internationalFootballConfigured
+    ? enabled
+    : [...new Set([...enabled, ...INTERNATIONAL_COMPETITION_KEYS])];
+  return saved?.internationalSportsConfigured
+    ? migrated
+    : [...new Set([...migrated, ...RUGBY_INTERNATIONAL_COMPETITION_KEYS])];
 }
 function siteBase(sport) { return `${ESPN_SITE_ROOT}/${encodeURIComponent(sport)}`; }
 function coreBase(sport, league) { return `${ESPN_CORE_ROOT}/${encodeURIComponent(sport)}/leagues/${leaguePath(league)}`; }
@@ -99,6 +123,10 @@ function broadcastsForFixture(fixture, config, region) {
     return fixture.broadcasts?.length ? fixture.broadcasts : [{ name: "NRL coverage", market: region }];
   }
   if (fixture.broadcasts?.length) return fixture.broadcasts;
+  // ESPN often omits broadcaster rows for national-team fixtures even when
+  // the match is listed in the selected market. Keep international football
+  // discoverable; the competition itself is the authoritative source here.
+  if (config.international) return [{ name: "International football", market: region }];
   return REGION_BROADCAST_FALLBACKS[region]?.[config.league] || [];
 }
 const LIVE_CALL_INTERVAL_MS = 7.5 * 60 * 1000;
@@ -566,9 +594,12 @@ export class FixtureIndex {
         const region = normaliseRegion(input.region);
         const saved = await this.state.storage.get("fixtureConfig") || {};
         const broadcastRules = { ...DEFAULT_BROADCAST_RULES, ...(saved.broadcastRules || await this.state.storage.get("broadcastRules") || {}) };
-        const enabledCompetitions = normaliseEnabledCompetitions(saved.enabledCompetitions);
+        const enabledCompetitions = migrateEnabledCompetitions(saved);
         const enabledRegions = normaliseEnabledRegions(saved.enabledRegions);
         const accessRules = normaliseAccessRules(saved.accessRules);
+        if (!saved.internationalFootballConfigured || !saved.internationalSportsConfigured) {
+          await this.state.storage.put("fixtureConfig", { ...saved, enabledCompetitions, internationalFootballConfigured: true, internationalSportsConfigured: true });
+        }
         const data = await pullFixtures(broadcastRules, enabledCompetitions, region);
         data.fixtures = (data.fixtures || []).map(fixture => applyFixtureAccess(fixture, accessRules));
         data.completedFixtures = (data.completedFixtures || []).map(fixture => applyFixtureAccess(fixture, accessRules));
@@ -598,8 +629,12 @@ export class FixtureIndex {
     }
     if (request.method === "GET" && new URL(request.url).pathname === "/config") {
       const saved = await this.state.storage.get("fixtureConfig") || {};
+      const enabledCompetitions = migrateEnabledCompetitions(saved);
+      if (!saved.internationalFootballConfigured || !saved.internationalSportsConfigured) {
+        await this.state.storage.put("fixtureConfig", { ...saved, enabledCompetitions, internationalFootballConfigured: true, internationalSportsConfigured: true });
+      }
       const broadcastRules = { ...DEFAULT_BROADCAST_RULES, ...(saved.broadcastRules || await this.state.storage.get("broadcastRules") || {}) };
-      return json({ broadcastRules, accessRules: normaliseAccessRules(saved.accessRules), enabledCompetitions: normaliseEnabledCompetitions(saved.enabledCompetitions), enabledRegions: normaliseEnabledRegions(saved.enabledRegions), regions: BROADCAST_REGIONS, competitions: SUPPORTED_COMPETITIONS });
+      return json({ broadcastRules, accessRules: normaliseAccessRules(saved.accessRules), enabledCompetitions, enabledRegions: normaliseEnabledRegions(saved.enabledRegions), regions: BROADCAST_REGIONS, competitions: SUPPORTED_COMPETITIONS });
     }
     if (request.method === "POST" && new URL(request.url).pathname === "/config") {
       try {
@@ -609,7 +644,7 @@ export class FixtureIndex {
         const accessRules = normaliseAccessRules(input.accessRules);
         const enabledCompetitions = normaliseEnabledCompetitions(input.enabledCompetitions);
         const enabledRegions = normaliseEnabledRegions(input.enabledRegions);
-        await this.state.storage.put("fixtureConfig", { broadcastRules, accessRules, enabledCompetitions, enabledRegions });
+        await this.state.storage.put("fixtureConfig", { broadcastRules, accessRules, enabledCompetitions, enabledRegions, internationalFootballConfigured: true, internationalSportsConfigured: true });
         await this.state.storage.put("broadcastRules", broadcastRules);
         // Saving configuration is independent of the ESPN pull. The public
         // fixture page will use this selection on its next load or manual refresh.
