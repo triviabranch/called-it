@@ -444,7 +444,7 @@ async function pullFixtures(broadcastRules = DEFAULT_BROADCAST_RULES, enabledCom
   // coverage health is still reported for already-fetched programme rows.
   const coverageResults = programmes.map(result => result.status === "fulfilled"
     ? { sport: result.value.sport, league: result.value.league, approved: null, checkedAt: now, sampleSize: result.value.events.length, matchesWithData: null, averageEvents: null, coverage: null, reason: "Coverage validation deferred from fixture discovery" }
-    : ({ sport: "unknown", league: "unknown", approved: false, checkedAt: now, sampleSize: 0, matchesWithData: 0, averageEvents: 0, coverage: {}, reason: result.reason?.message || "programme pull failed" })));
+    : ({ sport: "unknown", league: "unknown", approved: false, checkedAt: now, sampleSize: 0, matchesWithData: 0, averageEvents: 0, coverage: {}, reason: result.reason?.message || "programme pull failed" }));
   const coverage = Object.fromEntries(coverageResults.map(result => [`${result.sport}:${result.league}`, result]));
   // Keep the complete fetched programme available to the discovery
   // surface. The public endpoint selects today's fixtures.
