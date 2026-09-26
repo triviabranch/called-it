@@ -436,9 +436,15 @@ async function pullFixtures(broadcastRules = DEFAULT_BROADCAST_RULES, enabledCom
     league: config.league,
     events: await scoreboardEvents(config.sport, config.league, start, end, selectedRegion)
   })));
-  const coverageResults = await Promise.all(programmes.map(result => result.status === "fulfilled"
-    ? validateLeague(result.value.sport, result.value.league, result.value.events)
-    : ({ sport: "unknown", league: "unknown", approved: false, checkedAt: Date.now(), sampleSize: 0, matchesWithData: 0, averageEvents: 0, coverage: {}, reason: result.reason?.message || "programme pull failed" })));
+  // Fixture discovery and event-coverage validation must not share the same
+  // hot path. Validation fans out into Core API requests for several sample
+  // matches per competition and can exhaust the Worker subrequest budget,
+  // causing otherwise valid live fixtures (including international matches)
+  // to disappear from the catalogue. Keep discovery authoritative and cheap;
+  // coverage health is still reported for already-fetched programme rows.
+  const coverageResults = programmes.map(result => result.status === "fulfilled"
+    ? { sport: result.value.sport, league: result.value.league, approved: null, checkedAt: now, sampleSize: result.value.events.length, matchesWithData: null, averageEvents: null, coverage: null, reason: "Coverage validation deferred from fixture discovery" }
+    : ({ sport: "unknown", league: "unknown", approved: false, checkedAt: now, sampleSize: 0, matchesWithData: 0, averageEvents: 0, coverage: {}, reason: result.reason?.message || "programme pull failed" })));
   const coverage = Object.fromEntries(coverageResults.map(result => [`${result.sport}:${result.league}`, result]));
   // Keep the complete fetched programme available to the discovery
   // surface. The public endpoint selects today's fixtures.
